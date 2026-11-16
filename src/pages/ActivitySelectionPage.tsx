@@ -55,7 +55,7 @@ export const ActivitySelectionPage: React.FC = () => {
 
         {/* Child Profile & Language Switcher */}
         <div className="flex items-center space-x-3">
-          {currentChild && (
+          {currentChild ? (
             <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-white shadow-sm border border-slate-200">
               <span className="w-7 h-7 rounded-full bg-amber-400 flex items-center justify-center font-bold text-xs text-slate-900">
                 {currentChild.name.charAt(0)}
@@ -64,6 +64,13 @@ export const ActivitySelectionPage: React.FC = () => {
                 {currentChild.name}
               </span>
             </div>
+          ) : (
+            <button
+              onClick={() => navigate('/therapist')}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold shadow-sm hover:bg-amber-100 transition"
+            >
+              <span>+ Enroll Child</span>
+            </button>
           )}
 
           {/* Language Toggle */}

@@ -107,22 +107,42 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   isPausedRef.current = isPaused;
 
   const refreshChildren = useCallback(() => {
-    const list = DataService.getChildren();
-    setChildrenList(list);
-    if (!currentChild && list.length > 0) {
-      setCurrentChild(list[0]);
-      setCurrentAssistanceLevelState(list[0].baselineAssistanceLevel);
-      setLanguageState(list[0].preferredLanguage);
-    }
-  }, [currentChild]);
+    // Kept for backward compatibility if manual refresh triggered
+  }, []);
 
   useEffect(() => {
-    refreshChildren();
-    // Synchronize with remote Firestore if available
-    DataService.syncFromFirestore().then(() => {
-      refreshChildren();
-    });
-  }, [refreshChildren]);
+    // Realtime Firestore subscription for children
+    let unsubscribeChildren: (() => void) | undefined;
+    try {
+      unsubscribeChildren = DataService.subscribeChildren((list) => {
+        setChildrenList(list);
+        setCurrentChild((prev) => {
+          if (!prev && list.length > 0) {
+            setCurrentAssistanceLevelState(list[0].baselineAssistanceLevel);
+            setLanguageState(list[0].preferredLanguage);
+            return list[0];
+          }
+          if (prev) {
+            const match = list.find((c) => c.id === prev.id);
+            return match || (list.length > 0 ? list[0] : null);
+          }
+          return null;
+        });
+      });
+    } catch (e) {
+      console.warn('[SessionContext] Failed to subscribe to children:', e);
+    }
+
+    return () => {
+      if (unsubscribeChildren) {
+        try {
+          unsubscribeChildren();
+        } catch (e) {
+          // Safe unmount
+        }
+      }
+    };
+  }, []);
 
   // Session duration timer
   useEffect(() => {
@@ -195,7 +215,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const acts = activities && activities.length > 0 ? activities : selectedActivities;
     const newSession: ActivitySession = {
       id: `sess_${Date.now()}`,
-      childId: currentChild?.id || 'child_1',
+      childId: currentChild?.id || (childrenList[0]?.id || 'learner'),
       therapistId: 'therapist_dr_sarah',
       startTime: Date.now(),
       status: 'in-progress',

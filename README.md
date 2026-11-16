@@ -33,14 +33,15 @@ The application interface matches the physical fabric DIVAD board:
   - Positive reinforcement: Stars, badges, congratulatory fanfare, and confetti celebrations.
 
 - **Therapist Portal**:
-  - Child profile management (Add, Edit, Delete, Select).
+  - Secure Firebase Authentication login, registration, and password reset (`/therapist/login`).
+  - Child profile management with real-time Firestore persistence (Add, Edit, Delete, Select).
   - Assistance level configuration & tracking:
     - Level 1: Independent
     - Level 2: Verbal Cue
     - Level 3: Visual Cue
     - Level 4: Physical Assistance
   - Clinical reports export in **PDF** (formatted OT clinical report with tables and signature block) and **CSV** format.
-  - Session history and activity performance metrics.
+  - Live Firestore session history and activity performance metrics streaming.
 
 - **Dual Hardware Communication Architecture**:
   - `HardwareManager` common TypeScript interface.

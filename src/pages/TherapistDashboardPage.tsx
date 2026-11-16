@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSession } from '../contexts/SessionContext';
 import { DataService } from '../services/firebase/dataService';
 import { ReportService } from '../services/reports/ReportService';
-import { ChildProfile, ActivityType, ASSISTANCE_LEVELS, AssistanceLevel } from '../types';
+import { ChildProfile, ActivitySession, ActivityType, ASSISTANCE_LEVELS, AssistanceLevel } from '../types';
 import { ACTIVITIES_DATA } from '../data/activitiesData';
 import {
   Users,
@@ -23,24 +23,26 @@ import {
   CheckCircle2,
   X,
   Search,
+  LogOut,
+  FolderOpen,
 } from 'lucide-react';
 import { soundEffects } from '../services/audio/SoundEffects';
 
 export const TherapistDashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { therapist, logout } = useAuth();
+  const { therapist, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const {
     childrenList,
     currentChild,
     selectChild,
     startSession,
-    refreshChildren,
   } = useSession();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'children' | 'sessions' | 'reports'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingChild, setEditingChild] = useState<ChildProfile | null>(null);
+  const [allSessions, setAllSessions] = useState<ActivitySession[]>([]);
 
   // Form State for Child Profile CRUD
   const [formName, setFormName] = useState('');
@@ -51,10 +53,36 @@ export const TherapistDashboardPage: React.FC = () => {
   const [formNotes, setFormNotes] = useState('');
   const [formColor, setFormColor] = useState('#EAB308');
 
-  const allSessions = DataService.getSessions();
-  const selectedChildSessions = currentChild
-    ? allSessions.filter((s) => s.childId === currentChild.id)
-    : [];
+  // Route protection: If not logged in, redirect to login page
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/therapist/login');
+    }
+  }, [authLoading, isAuthenticated, navigate]);
+
+  // Real-time Firestore sessions subscription (only when authenticated)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let unsubscribeSessions: (() => void) | undefined;
+    try {
+      unsubscribeSessions = DataService.subscribeSessions((sessions) => {
+        setAllSessions(sessions);
+      });
+    } catch (e) {
+      console.warn('[TherapistDashboard] Failed to subscribe to sessions:', e);
+    }
+
+    return () => {
+      if (unsubscribeSessions) {
+        try {
+          unsubscribeSessions();
+        } catch (e) {
+          // Safe unmount
+        }
+      }
+    };
+  }, [isAuthenticated]);
 
   const handleOpenAddModal = () => {
     setEditingChild(null);
@@ -80,17 +108,17 @@ export const TherapistDashboardPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveChild = (e: React.FormEvent) => {
+  const handleSaveChild = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
-    DataService.saveChild({
+    await DataService.saveChild({
       id: editingChild?.id,
       name: formName.trim(),
       age: Number(formAge),
       gender: formGender,
       avatar: 'bear',
-      therapistId: therapist?.uid || 'therapist_dr_sarah',
+      therapistId: therapist?.uid || 'therapist',
       baselineAssistanceLevel: formAssistance,
       preferredLanguage: formLanguage,
       notes: formNotes,
@@ -98,15 +126,13 @@ export const TherapistDashboardPage: React.FC = () => {
       active: true,
     });
 
-    refreshChildren();
     setIsModalOpen(false);
     soundEffects.playSuccessChime();
   };
 
-  const handleDeleteChild = (id: string) => {
-    if (window.confirm('Are you sure you want to remove this child profile?')) {
-      DataService.deleteChild(id);
-      refreshChildren();
+  const handleDeleteChild = async (id: string) => {
+    if (window.confirm('Are you sure you want to remove this child profile from Firestore?')) {
+      await DataService.deleteChild(id);
     }
   };
 
@@ -118,7 +144,7 @@ export const TherapistDashboardPage: React.FC = () => {
 
   const handleExportPDF = (child: ChildProfile) => {
     const sessions = allSessions.filter((s) => s.childId === child.id);
-    ReportService.exportChildReportPDF(child, sessions);
+    ReportService.exportChildReportPDF(child, sessions, therapist);
     soundEffects.playStarPop();
   };
 
@@ -127,9 +153,23 @@ export const TherapistDashboardPage: React.FC = () => {
     soundEffects.playStarPop();
   };
 
+  const handleLogout = async () => {
+    await logout();
+    soundEffects.playTap();
+    navigate('/therapist/login');
+  };
+
   const filteredChildren = childrenList.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500 font-medium text-sm">
+        Loading therapist session...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -148,33 +188,44 @@ export const TherapistDashboardPage: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <span className="font-black text-xl text-slate-900 tracking-tight">DIVAD</span>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
-                  Therapist Portal
+                  Therapist Portal (Firestore Live)
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
-                {therapist?.displayName} • {therapist?.organization}
+                {therapist?.displayName || therapist?.email} • {therapist?.organization || 'SIMATS Center'}
               </p>
             </div>
           </div>
 
-          {/* Quick Launch Child Mode button */}
-          <div className="flex items-center space-x-3">
+          {/* Action buttons & Sign Out */}
+          <div className="flex items-center space-x-2.5">
             {currentChild && (
               <button
                 onClick={() => handleLaunchChildMode(currentChild.id)}
-                className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-md transition"
+                className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-sm transition"
               >
-                <Play className="w-4 h-4 fill-slate-950" />
+                <Play className="w-3.5 h-3.5 fill-slate-950" />
                 <span>Launch Child Mode ({currentChild.name.split(' ')[0]})</span>
               </button>
             )}
+
             <button
               onClick={handleExportCSV}
-              className="hidden sm:flex items-center space-x-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+              disabled={allSessions.length === 0}
+              className="hidden sm:flex items-center space-x-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition disabled:opacity-40"
               title="Download CSV"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5" />
               <span>Export CSV</span>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 text-xs font-semibold border border-slate-200 transition"
+              title="Log out of therapist session"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </div>
@@ -216,20 +267,20 @@ export const TherapistDashboardPage: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Registered Children
+                  Enrolled Children
                 </div>
                 <div className="text-3xl font-black text-slate-900 mt-1">{childrenList.length}</div>
                 <div className="text-[11px] text-emerald-600 font-semibold mt-1">
-                  Active in training
+                  Synced via Firestore
                 </div>
               </div>
 
               <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Total Sessions Logged
+                  Live Sessions
                 </div>
                 <div className="text-3xl font-black text-slate-900 mt-1">{allSessions.length}</div>
-                <div className="text-[11px] text-sky-600 font-semibold mt-1">Across 5 fasteners</div>
+                <div className="text-[11px] text-sky-600 font-semibold mt-1">Real-time dynamic logs</div>
               </div>
 
               <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm">
@@ -250,7 +301,7 @@ export const TherapistDashboardPage: React.FC = () => {
                 </div>
                 <div className="text-2xl font-black text-slate-800 mt-1">6 Sections</div>
                 <div className="text-[11px] text-emerald-600 font-semibold mt-1">
-                  Ready with BLE / Sim
+                  BLE & Simulation Ready
                 </div>
               </div>
             </div>
@@ -270,52 +321,70 @@ export const TherapistDashboardPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="space-y-2.5 max-h-96 overflow-y-auto">
-                  {childrenList.map((c) => {
-                    const isSelected = currentChild?.id === c.id;
-                    const sessionCount = allSessions.filter((s) => s.childId === c.id).length;
-                    return (
-                      <div
-                        key={c.id}
-                        onClick={() => selectChild(c.id)}
-                        className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
-                          isSelected
-                            ? 'bg-sky-50 border-sky-400 ring-2 ring-sky-300'
-                            : 'bg-white hover:bg-slate-50 border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-sm"
-                            style={{ backgroundColor: c.favoriteColor || '#0284C7' }}
-                          >
-                            {c.name.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-bold text-sm text-slate-900">{c.name}</div>
-                            <div className="text-[11px] text-slate-500">
-                              Age: {c.age} • Level {c.baselineAssistanceLevel} (
-                              {ASSISTANCE_LEVELS[c.baselineAssistanceLevel].label})
+                {childrenList.length === 0 ? (
+                  <div className="text-center py-8 px-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 space-y-3">
+                    <Users className="w-10 h-10 text-slate-400 mx-auto" />
+                    <div>
+                      <div className="font-bold text-sm text-slate-800">No Children Enrolled Yet</div>
+                      <div className="text-xs text-slate-500">
+                        Add your first child profile to begin dressing training.
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleOpenAddModal}
+                      className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm transition"
+                    >
+                      + Add Child Profile
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-96 overflow-y-auto">
+                    {childrenList.map((c) => {
+                      const isSelected = currentChild?.id === c.id;
+                      const sessionCount = allSessions.filter((s) => s.childId === c.id).length;
+                      return (
+                        <div
+                          key={c.id}
+                          onClick={() => selectChild(c.id)}
+                          className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? 'bg-sky-50 border-sky-400 ring-2 ring-sky-300'
+                              : 'bg-white hover:bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div
+                              className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-sm"
+                              style={{ backgroundColor: c.favoriteColor || '#0284C7' }}
+                            >
+                              {c.name.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-sm text-slate-900">{c.name}</div>
+                              <div className="text-[11px] text-slate-500">
+                                Age: {c.age} • Level {c.baselineAssistanceLevel} (
+                                {ASSISTANCE_LEVELS[c.baselineAssistanceLevel]?.label || 'Independent'})
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="text-right">
-                          <div className="text-xs font-bold text-slate-700">{sessionCount} sessions</div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLaunchChildMode(c.id);
-                            }}
-                            className="mt-1 px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-[10px] transition"
-                          >
-                            Start
-                          </button>
+                          <div className="text-right">
+                            <div className="text-xs font-bold text-slate-700">{sessionCount} sessions</div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLaunchChildMode(c.id);
+                              }}
+                              className="mt-1 px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-[10px] transition"
+                            >
+                              Start
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Right Column: Physical Board Fastener Breakdown (7 cols) */}
@@ -374,95 +443,113 @@ export const TherapistDashboardPage: React.FC = () => {
                 className="w-full sm:w-auto flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm transition"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add New Child</span>
+                <span>Add New Child to Firestore</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredChildren.map((c) => {
-                const childSessions = allSessions.filter((s) => s.childId === c.id);
-                return (
-                  <div
-                    key={c.id}
-                    className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between space-y-4"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-base shadow-sm"
-                            style={{ backgroundColor: c.favoriteColor || '#0284C7' }}
-                          >
-                            {c.name.charAt(0)}
+            {filteredChildren.length === 0 ? (
+              <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 space-y-3">
+                <Users className="w-12 h-12 text-slate-300 mx-auto" />
+                <h4 className="font-black text-base text-slate-800">No Child Profiles Found</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {searchQuery
+                    ? `No children matching "${searchQuery}".`
+                    : 'Get started by creating your first child profile. It will be stored securely in Firestore.'}
+                </p>
+                <button
+                  onClick={handleOpenAddModal}
+                  className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow transition"
+                >
+                  + Add Child Profile
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredChildren.map((c) => {
+                  const childSessions = allSessions.filter((s) => s.childId === c.id);
+                  return (
+                    <div
+                      key={c.id}
+                      className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between space-y-4"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div
+                              className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-base shadow-sm"
+                              style={{ backgroundColor: c.favoriteColor || '#0284C7' }}
+                            >
+                              {c.name.charAt(0)}
+                            </div>
+                            <div>
+                              <h4 className="font-black text-base text-slate-900">{c.name}</h4>
+                              <p className="text-xs text-slate-500">
+                                {c.age} years old • {c.gender}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-black text-base text-slate-900">{c.name}</h4>
-                            <p className="text-xs text-slate-500">
-                              {c.age} years old • {c.gender}
+
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={() => handleOpenEditModal(c)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteChild(c.id)}
+                              className="p-1.5 rounded-lg text-rose-400 hover:text-rose-700 hover:bg-rose-50 transition"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Assistance Baseline:</span>
+                            <span className="font-bold text-slate-800">
+                              Level {c.baselineAssistanceLevel} ({ASSISTANCE_LEVELS[c.baselineAssistanceLevel]?.label || 'Independent'})
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Preferred Language:</span>
+                            <span className="font-bold text-slate-800">
+                              {c.preferredLanguage === 'ta' ? 'தமிழ் (Tamil)' : 'English'}
+                            </span>
+                          </div>
+
+                          {c.notes && (
+                            <p className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-slate-600 text-[11px] leading-relaxed">
+                              {c.notes}
                             </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-1">
-                          <button
-                            onClick={() => handleOpenEditModal(c)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteChild(c.id)}
-                            className="p-1.5 rounded-lg text-rose-400 hover:text-rose-700 hover:bg-rose-50 transition"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          )}
                         </div>
                       </div>
 
-                      <div className="mt-4 space-y-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Assistance Baseline:</span>
-                          <span className="font-bold text-slate-800">
-                            Level {c.baselineAssistanceLevel} ({ASSISTANCE_LEVELS[c.baselineAssistanceLevel].label})
-                          </span>
-                        </div>
+                      <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
+                        <button
+                          onClick={() => handleLaunchChildMode(c.id)}
+                          className="flex-1 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs transition flex items-center justify-center space-x-1"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-slate-950" />
+                          <span>Launch Session</span>
+                        </button>
 
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Preferred Language:</span>
-                          <span className="font-bold text-slate-800">
-                            {c.preferredLanguage === 'ta' ? 'தமிழ் (Tamil)' : 'English'}
-                          </span>
-                        </div>
-
-                        {c.notes && (
-                          <p className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-slate-600 text-[11px] leading-relaxed">
-                            {c.notes}
-                          </p>
-                        )}
+                        <button
+                          onClick={() => handleExportPDF(c)}
+                          className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                          title="Download PDF Report"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-
-                    <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
-                      <button
-                        onClick={() => handleLaunchChildMode(c.id)}
-                        className="flex-1 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs transition flex items-center justify-center space-x-1"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-slate-950" />
-                        <span>Launch Session</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleExportPDF(c)}
-                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-                        title="Download PDF Report"
-                      >
-                        <FileText className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -470,74 +557,85 @@ export const TherapistDashboardPage: React.FC = () => {
         {activeTab === 'sessions' && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-black text-base text-slate-900">Training Session Logs</h3>
+              <h3 className="font-black text-base text-slate-900">Firestore Training Session Logs</h3>
               <button
                 onClick={handleExportCSV}
-                className="flex items-center space-x-1.5 text-xs font-bold text-sky-600 hover:text-sky-800"
+                disabled={allSessions.length === 0}
+                className="flex items-center space-x-1.5 text-xs font-bold text-sky-600 hover:text-sky-800 disabled:opacity-40"
               >
                 <Download className="w-4 h-4" />
                 <span>Export CSV</span>
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="px-6 py-3">Date</th>
-                    <th className="px-6 py-3">Child</th>
-                    <th className="px-6 py-3">Activities</th>
-                    <th className="px-6 py-3">Attempts</th>
-                    <th className="px-6 py-3">Stars</th>
-                    <th className="px-6 py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {allSessions.map((s) => {
-                    const child = childrenList.find((c) => c.id === s.childId);
-                    return (
-                      <tr key={s.id} className="hover:bg-slate-50 transition">
-                        <td className="px-6 py-3.5 text-slate-600">
-                          {new Date(s.startTime).toLocaleDateString()} {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="px-6 py-3.5 font-bold text-slate-900">
-                          {child?.name || s.childId}
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <div className="flex flex-wrap gap-1">
-                            {s.selectedActivities.map((a) => (
-                              <span
-                                key={a}
-                                className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold uppercase"
-                              >
-                                {a}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-6 py-3.5 font-semibold text-slate-700">
-                          {s.attempts.filter((a) => a.isCorrect).length} / {s.attempts.length}
-                        </td>
-                        <td className="px-6 py-3.5 font-bold text-amber-500">
-                          {s.totalStars} ⭐
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <span
-                            className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
-                              s.status === 'completed'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
-                          >
-                            {s.status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {allSessions.length === 0 ? (
+              <div className="p-12 text-center space-y-2">
+                <Calendar className="w-12 h-12 text-slate-300 mx-auto" />
+                <h4 className="font-black text-base text-slate-800">No Training Sessions Recorded Yet</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  When a session is conducted in Child Mode, attempts and outcomes will automatically stream here directly from Firestore.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-6 py-3">Date</th>
+                      <th className="px-6 py-3">Child</th>
+                      <th className="px-6 py-3">Activities</th>
+                      <th className="px-6 py-3">Attempts</th>
+                      <th className="px-6 py-3">Stars</th>
+                      <th className="px-6 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {allSessions.map((s) => {
+                      const child = childrenList.find((c) => c.id === s.childId);
+                      return (
+                        <tr key={s.id} className="hover:bg-slate-50 transition">
+                          <td className="px-6 py-3.5 text-slate-600">
+                            {new Date(s.startTime).toLocaleDateString()} {new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-6 py-3.5 font-bold text-slate-900">
+                            {child?.name || s.childId}
+                          </td>
+                          <td className="px-6 py-3.5">
+                            <div className="flex flex-wrap gap-1">
+                              {s.selectedActivities.map((a) => (
+                                <span
+                                  key={a}
+                                  className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold uppercase"
+                                >
+                                  {a}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-6 py-3.5 font-semibold text-slate-700">
+                            {s.attempts.filter((a) => a.isCorrect).length} / {s.attempts.length}
+                          </td>
+                          <td className="px-6 py-3.5 font-bold text-amber-500">
+                            {s.totalStars} ⭐
+                          </td>
+                          <td className="px-6 py-3.5">
+                            <span
+                              className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
+                                s.status === 'completed'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {s.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -558,7 +656,8 @@ export const TherapistDashboardPage: React.FC = () => {
               <div className="flex items-center space-x-3">
                 <button
                   onClick={handleExportCSV}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow transition flex items-center space-x-2"
+                  disabled={allSessions.length === 0}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow transition flex items-center space-x-2 disabled:opacity-40"
                 >
                   <Download className="w-4 h-4" />
                   <span>Export All CSV</span>
@@ -566,40 +665,48 @@ export const TherapistDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {childrenList.map((c) => {
-                const childSessions = allSessions.filter((s) => s.childId === c.id);
-                return (
-                  <div
-                    key={c.id}
-                    className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm flex items-center justify-between"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-base shadow-sm"
-                        style={{ backgroundColor: c.favoriteColor || '#0284C7' }}
-                      >
-                        {c.name.charAt(0)}
-                      </div>
-                      <div>
-                        <h4 className="font-black text-base text-slate-900">{c.name}</h4>
-                        <p className="text-xs text-slate-500">
-                          {childSessions.length} sessions logged • Baseline Lvl {c.baselineAssistanceLevel}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleExportPDF(c)}
-                      className="px-4 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs transition border border-sky-200 flex items-center space-x-1.5"
+            {childrenList.length === 0 ? (
+              <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 space-y-2">
+                <FileText className="w-10 h-10 text-slate-400 mx-auto" />
+                <h4 className="font-bold text-sm text-slate-800">No Child Records in Firestore</h4>
+                <p className="text-xs text-slate-500">Add child profiles to generate and download clinical PDF reports.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {childrenList.map((c) => {
+                  const childSessions = allSessions.filter((s) => s.childId === c.id);
+                  return (
+                    <div
+                      key={c.id}
+                      className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm flex items-center justify-between"
                     >
-                      <FileText className="w-4 h-4" />
-                      <span>Download PDF</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                      <div className="flex items-center space-x-3">
+                        <div
+                          className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-base shadow-sm"
+                          style={{ backgroundColor: c.favoriteColor || '#0284C7' }}
+                        >
+                          {c.name.charAt(0)}
+                        </div>
+                        <div>
+                          <h4 className="font-black text-base text-slate-900">{c.name}</h4>
+                          <p className="text-xs text-slate-500">
+                            {childSessions.length} sessions logged • Baseline Lvl {c.baselineAssistanceLevel}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleExportPDF(c)}
+                        className="px-4 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs transition border border-sky-200 flex items-center space-x-1.5"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>Download PDF</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -610,7 +717,7 @@ export const TherapistDashboardPage: React.FC = () => {
           <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-black text-base text-slate-900">
-                {editingChild ? 'Edit Child Profile' : 'Add New Child Profile'}
+                {editingChild ? 'Edit Child Profile (Firestore)' : 'Add New Child to Firestore'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -688,6 +795,23 @@ export const TherapistDashboardPage: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-slate-600 mb-1">Favorite Color Accent</label>
+                <div className="flex items-center space-x-3">
+                  {['#EAB308', '#8D6E63', '#0284C7', '#DB2777', '#16A34A', '#DC2626'].map((col) => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => setFormColor(col)}
+                      className={`w-7 h-7 rounded-full border-2 transition ${
+                        formColor === col ? 'border-slate-900 scale-110' : 'border-transparent'
+                      }`}
+                      style={{ backgroundColor: col }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-slate-600 mb-1">Clinical Notes & Goals</label>
                 <textarea
                   rows={2}
@@ -710,7 +834,7 @@ export const TherapistDashboardPage: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold transition shadow"
                 >
-                  Save Profile
+                  Save to Firestore
                 </button>
               </div>
             </form>
@@ -720,4 +844,3 @@ export const TherapistDashboardPage: React.FC = () => {
     </div>
   );
 };
-

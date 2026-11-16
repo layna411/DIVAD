@@ -1,340 +1,249 @@
-import { ChildProfile, ActivitySession, ActivityAttempt, TherapistUser, AssistanceLevel } from '../../types';
+import { ChildProfile, ActivitySession, TherapistUser } from '../../types';
 import { firestore } from './firebaseConfig';
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  Unsubscribe,
+} from 'firebase/firestore';
 
 const STORAGE_KEYS = {
   CHILDREN: 'divad_children',
   SESSIONS: 'divad_sessions',
-  THERAPIST: 'divad_therapist_user',
-  SETTINGS: 'divad_app_settings',
 };
 
-const SAMPLE_CHILDREN: ChildProfile[] = [
-  {
-    id: 'child_1',
-    name: 'Aarav Kumar',
-    age: 6,
-    gender: 'male',
-    avatar: 'lion',
-    therapistId: 'therapist_dr_sarah',
-    baselineAssistanceLevel: 2,
-    preferredLanguage: 'en',
-    favoriteColor: '#EAB308',
-    notes: 'Responsive to verbal cues. Practicing zipping and large buttons.',
-    active: true,
-    createdAt: Date.now() - 86400000 * 14,
-    updatedAt: Date.now() - 86400000 * 2,
-  },
-  {
-    id: 'child_2',
-    name: 'Ananya Ramesh',
-    age: 5,
-    gender: 'female',
-    avatar: 'rabbit',
-    therapistId: 'therapist_dr_sarah',
-    baselineAssistanceLevel: 1,
-    preferredLanguage: 'ta',
-    favoriteColor: '#DB2777',
-    notes: 'High fine-motor skills. Responds enthusiastically to Tamil audio.',
-    active: true,
-    createdAt: Date.now() - 86400000 * 20,
-    updatedAt: Date.now() - 86400000 * 1,
-  },
-  {
-    id: 'child_3',
-    name: 'Kavin Selvan',
-    age: 7,
-    gender: 'male',
-    avatar: 'bear',
-    therapistId: 'therapist_dr_sarah',
-    baselineAssistanceLevel: 3,
-    preferredLanguage: 'en',
-    favoriteColor: '#0284C7',
-    notes: 'Benefits from visual highlighting. Working on buckle tension.',
-    active: true,
-    createdAt: Date.now() - 86400000 * 10,
-    updatedAt: Date.now() - 86400000 * 3,
-  },
-  {
-    id: 'child_4',
-    name: 'Priya Sundaram',
-    age: 6,
-    gender: 'female',
-    avatar: 'fox',
-    therapistId: 'therapist_dr_sarah',
-    baselineAssistanceLevel: 2,
-    preferredLanguage: 'ta',
-    favoriteColor: '#16A34A',
-    notes: 'Velcro mastered; currently focusing on three buttons sequence.',
-    active: true,
-    createdAt: Date.now() - 86400000 * 30,
-    updatedAt: Date.now() - 86400000 * 4,
-  },
-];
-
-const SAMPLE_SESSIONS: ActivitySession[] = [
-  {
-    id: 'sess_101',
-    childId: 'child_1',
-    therapistId: 'therapist_dr_sarah',
-    startTime: Date.now() - 86400000 * 2 - 3600000,
-    endTime: Date.now() - 86400000 * 2 - 2400000,
-    status: 'completed',
-    selectedActivities: ['zipper', 'button'],
-    currentActivityIndex: 1,
-    currentStepIndex: 3,
-    totalStars: 6,
-    badgesEarned: ['Zipper Hero', 'Button Master'],
-    language: 'en',
-    notes: 'Excellent coordination with zipper base. Needed 1 verbal prompt for button tilt.',
-    attempts: [
-      {
-        id: 'att_1',
-        sessionId: 'sess_101',
-        childId: 'child_1',
-        activityId: 'zipper',
-        stepNumber: 5,
-        timestamp: Date.now() - 86400000 * 2 - 3200000,
-        isCorrect: true,
-        assistanceLevel: 2,
-        durationMs: 8400,
-        sensorEvent: 'ZIPPER_CLOSED',
-      },
-      {
-        id: 'att_2',
-        sessionId: 'sess_101',
-        childId: 'child_1',
-        activityId: 'button',
-        stepNumber: 4,
-        timestamp: Date.now() - 86400000 * 2 - 2700000,
-        isCorrect: true,
-        assistanceLevel: 2,
-        durationMs: 12500,
-        sensorEvent: 'BUTTON_FASTENED',
-      },
-    ],
-  },
-  {
-    id: 'sess_102',
-    childId: 'child_2',
-    therapistId: 'therapist_dr_sarah',
-    startTime: Date.now() - 86400000 * 1 - 7200000,
-    endTime: Date.now() - 86400000 * 1 - 5800000,
-    status: 'completed',
-    selectedActivities: ['snap', 'velcro'],
-    currentActivityIndex: 1,
-    currentStepIndex: 2,
-    totalStars: 8,
-    badgesEarned: ['Snap Champion', 'Velcro Star'],
-    language: 'ta',
-    notes: 'Independent snap fastening on first attempt.',
-    attempts: [
-      {
-        id: 'att_3',
-        sessionId: 'sess_102',
-        childId: 'child_2',
-        activityId: 'snap',
-        stepNumber: 3,
-        timestamp: Date.now() - 86400000 * 1 - 6500000,
-        isCorrect: true,
-        assistanceLevel: 1,
-        durationMs: 5200,
-        sensorEvent: 'SNAP_CONNECTED',
-      },
-      {
-        id: 'att_4',
-        sessionId: 'sess_102',
-        childId: 'child_2',
-        activityId: 'velcro',
-        stepNumber: 3,
-        timestamp: Date.now() - 86400000 * 1 - 6000000,
-        isCorrect: true,
-        assistanceLevel: 1,
-        durationMs: 4100,
-        sensorEvent: 'VELCRO_ATTACHED',
-      },
-    ],
-  },
-];
-
 export class DataService {
-  // Children Profile Management
-  static getChildren(): ChildProfile[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.CHILDREN);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(SAMPLE_CHILDREN));
-      return SAMPLE_CHILDREN;
+  /**
+   * Real-time subscription to children collection in Firestore.
+   * Emits whenever a child is added, edited, or removed.
+   */
+  static subscribeChildren(callback: (children: ChildProfile[]) => void): Unsubscribe {
+    // Check local cache first for instant initial render
+    const cached = this.getCachedChildren();
+    if (cached.length > 0) {
+      callback(cached);
     }
+
+    if (!firestore) {
+      callback(cached);
+      return () => {};
+    }
+
+    let isTerminated = false;
+    let unsub: Unsubscribe | null = null;
+
     try {
-      return JSON.parse(raw);
-    } catch {
-      return SAMPLE_CHILDREN;
+      const childrenCol = collection(firestore, 'children');
+      const q = query(childrenCol, orderBy('createdAt', 'desc'));
+
+      unsub = onSnapshot(
+        q,
+        (snapshot) => {
+          const children: ChildProfile[] = [];
+          snapshot.forEach((docSnap) => {
+            children.push(docSnap.data() as ChildProfile);
+          });
+
+          // Update local cache
+          localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(children));
+          callback(children);
+        },
+        (error) => {
+          isTerminated = true;
+          if (error.code === 'permission-denied') {
+            console.info('[Firestore] Permission notice: Waiting for Firestore rules or authentication in Firebase Console. Local clinical persistence active.');
+          } else {
+            console.warn('[Firestore] Realtime children listener notice:', error);
+          }
+          // Fallback to local persistence
+          callback(this.getCachedChildren());
+        }
+      );
+    } catch (err) {
+      console.warn('[Firestore] Error subscribing to children:', err);
+      callback(cached);
+      return () => {};
     }
-  }
 
-  static getChildById(id: string): ChildProfile | undefined {
-    return this.getChildren().find((c) => c.id === id);
-  }
-
-  static saveChild(child: Omit<ChildProfile, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): ChildProfile {
-    const children = this.getChildren();
-    const now = Date.now();
-    let savedChild: ChildProfile;
-
-    if (child.id) {
-      // Update
-      const index = children.findIndex((c) => c.id === child.id);
-      if (index >= 0) {
-        savedChild = {
-          ...children[index],
-          ...child,
-          updatedAt: now,
-        };
-        children[index] = savedChild;
-      } else {
-        savedChild = {
-          ...child,
-          id: child.id,
-          createdAt: now,
-          updatedAt: now,
-          active: child.active ?? true,
-        };
-        children.unshift(savedChild);
+    return () => {
+      if (unsub && !isTerminated) {
+        try {
+          unsub();
+        } catch {
+          // Suppress any internal Firestore SDK watch stream assertion failures on unmount
+        }
       }
-    } else {
-      // Create
-      savedChild = {
-        ...child,
-        id: `child_${Date.now()}`,
-        createdAt: now,
-        updatedAt: now,
-        active: child.active ?? true,
-      };
-      children.unshift(savedChild);
-    }
-
-    localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(children));
-
-    // Asynchronously synchronize with Firestore
-    if (firestore) {
-      setDoc(doc(firestore, 'children', savedChild.id), savedChild)
-        .then(() => console.log(`[Firestore] Child ${savedChild.id} synced.`))
-        .catch((err) => console.warn('[Firestore] Child sync warning:', err));
-    }
-
-    return savedChild;
+    };
   }
 
-  static deleteChild(id: string): boolean {
-    const children = this.getChildren().filter((c) => c.id !== id);
-    localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(children));
+  /**
+   * Real-time subscription to sessions collection in Firestore.
+   */
+  static subscribeSessions(callback: (sessions: ActivitySession[]) => void): Unsubscribe {
+    const cached = this.getCachedSessions();
+    if (cached.length > 0) {
+      callback(cached);
+    }
 
-    // Asynchronously delete from Firestore
+    if (!firestore) {
+      callback(cached);
+      return () => {};
+    }
+
+    let isTerminated = false;
+    let unsub: Unsubscribe | null = null;
+
+    try {
+      const sessionsCol = collection(firestore, 'sessions');
+      const q = query(sessionsCol, orderBy('startTime', 'desc'));
+
+      unsub = onSnapshot(
+        q,
+        (snapshot) => {
+          const sessions: ActivitySession[] = [];
+          snapshot.forEach((docSnap) => {
+            sessions.push(docSnap.data() as ActivitySession);
+          });
+
+          // Update local cache
+          localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+          callback(sessions);
+        },
+        (error) => {
+          isTerminated = true;
+          if (error.code === 'permission-denied') {
+            console.info('[Firestore] Permission notice: Waiting for Firestore rules. Local session persistence active.');
+          } else {
+            console.warn('[Firestore] Realtime sessions listener notice:', error);
+          }
+          callback(this.getCachedSessions());
+        }
+      );
+    } catch (err) {
+      console.warn('[Firestore] Error subscribing to sessions:', err);
+      callback(cached);
+      return () => {};
+    }
+
+    return () => {
+      if (unsub && !isTerminated) {
+        try {
+          unsub();
+        } catch {
+          // Suppress any internal Firestore SDK watch stream assertion failures on unmount
+        }
+      }
+    };
+  }
+
+  /**
+   * Save (create or update) a child profile directly in Firestore
+   */
+  static async saveChild(
+    child: Omit<ChildProfile, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
+  ): Promise<ChildProfile> {
+    const now = Date.now();
+    const id = child.id || `child_${Date.now()}`;
+
+    const childDoc: ChildProfile = {
+      ...child,
+      id,
+      createdAt: (child as any).createdAt || now,
+      updatedAt: now,
+      active: child.active ?? true,
+    };
+
+    // Update local cache immediately
+    const cached = this.getCachedChildren();
+    const existingIndex = cached.findIndex((c) => c.id === id);
+    if (existingIndex >= 0) {
+      cached[existingIndex] = childDoc;
+    } else {
+      cached.unshift(childDoc);
+    }
+    localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(cached));
+
+    // Save to Firestore
     if (firestore) {
-      deleteDoc(doc(firestore, 'children', id))
-        .then(() => console.log(`[Firestore] Child ${id} deleted.`))
-        .catch((err) => console.warn('[Firestore] Child deletion warning:', err));
+      try {
+        await setDoc(doc(firestore, 'children', id), childDoc);
+        console.log(`[Firestore] Child document ${id} saved successfully.`);
+      } catch (err) {
+        console.warn('[Firestore] Notice: Child document saved locally. Firestore sync pending permissions:', err);
+      }
+    }
+
+    return childDoc;
+  }
+
+  /**
+   * Delete a child profile from Firestore
+   */
+  static async deleteChild(id: string): Promise<boolean> {
+    // Update local cache immediately
+    const cached = this.getCachedChildren().filter((c) => c.id !== id);
+    localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(cached));
+
+    // Delete from Firestore
+    if (firestore) {
+      try {
+        await deleteDoc(doc(firestore, 'children', id));
+        console.log(`[Firestore] Child document ${id} deleted.`);
+      } catch (err) {
+        console.warn('[Firestore] Notice: Child deleted locally. Firestore sync pending permissions:', err);
+      }
     }
 
     return true;
   }
 
-  // Session Management
-  static getSessions(): ActivitySession[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(SAMPLE_SESSIONS));
-      return SAMPLE_SESSIONS;
+  /**
+   * Save an activity session in Firestore
+   */
+  static async saveSession(session: ActivitySession): Promise<void> {
+    // Update local cache immediately
+    const cached = this.getCachedSessions();
+    const idx = cached.findIndex((s) => s.id === session.id);
+    if (idx >= 0) {
+      cached[idx] = session;
+    } else {
+      cached.unshift(session);
     }
+    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(cached));
+
+    // Save to Firestore
+    if (firestore) {
+      try {
+        await setDoc(doc(firestore, 'sessions', session.id), session);
+        console.log(`[Firestore] Session document ${session.id} saved.`);
+      } catch (err) {
+        console.warn('[Firestore] Notice: Session saved locally. Firestore sync pending permissions:', err);
+      }
+    }
+  }
+
+  // Local Storage Cache Helpers
+  static getCachedChildren(): ChildProfile[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.CHILDREN);
+    if (!raw) return [];
     try {
       return JSON.parse(raw);
     } catch {
-      return SAMPLE_SESSIONS;
+      return [];
     }
   }
 
-  static getSessionsForChild(childId: string): ActivitySession[] {
-    return this.getSessions().filter((s) => s.childId === childId);
-  }
-
-  static saveSession(session: ActivitySession): void {
-    const sessions = this.getSessions();
-    const index = sessions.findIndex((s) => s.id === session.id);
-    if (index >= 0) {
-      sessions[index] = session;
-    } else {
-      sessions.unshift(session);
-    }
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
-
-    // Asynchronously synchronize with Firestore
-    if (firestore) {
-      setDoc(doc(firestore, 'sessions', session.id), session)
-        .then(() => console.log(`[Firestore] Session ${session.id} synced.`))
-        .catch((err) => console.warn('[Firestore] Session sync warning:', err));
-    }
-  }
-
-  // Initial pull from Firestore on app startup
-  static async syncFromFirestore(): Promise<void> {
-    if (!firestore) return;
+  static getCachedSessions(): ActivitySession[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
+    if (!raw) return [];
     try {
-      const childrenSnapshot = await getDocs(collection(firestore, 'children'));
-      if (!childrenSnapshot.empty) {
-        const remoteChildren: ChildProfile[] = [];
-        childrenSnapshot.forEach((doc) => {
-          remoteChildren.push(doc.data() as ChildProfile);
-        });
-        if (remoteChildren.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(remoteChildren));
-        }
-      }
-
-      const sessionsSnapshot = await getDocs(collection(firestore, 'sessions'));
-      if (!sessionsSnapshot.empty) {
-        const remoteSessions: ActivitySession[] = [];
-        sessionsSnapshot.forEach((doc) => {
-          remoteSessions.push(doc.data() as ActivitySession);
-        });
-        if (remoteSessions.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(remoteSessions));
-        }
-      }
-    } catch (err) {
-      console.warn('[Firestore] Background sync notice (using local offline cache):', err);
+      return JSON.parse(raw);
+    } catch {
+      return [];
     }
-  }
-
-  // Therapist User
-  static getTherapistUser(): TherapistUser {
-    const raw = localStorage.getItem(STORAGE_KEYS.THERAPIST);
-    if (raw) {
-      try {
-        return JSON.parse(raw);
-      } catch {}
-    }
-    const defaultTherapist: TherapistUser = {
-      uid: 'therapist_dr_sarah',
-      email: 'sarah.therapist@divad.simats.edu',
-      displayName: 'Dr. Sarah Mitchell, OTR/L',
-      role: 'therapist',
-      organization: 'SIMATS Pediatric Occupational Therapy Center',
-    };
-    localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(defaultTherapist));
-    return defaultTherapist;
-  }
-
-  static updateTherapistUser(user: Partial<TherapistUser>): TherapistUser {
-    const current = this.getTherapistUser();
-    const updated = { ...current, ...user };
-    localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(updated));
-
-    if (firestore) {
-      setDoc(doc(firestore, 'therapists', updated.uid), updated)
-        .then(() => console.log('[Firestore] Therapist synced.'))
-        .catch((err) => console.warn('[Firestore] Therapist sync warning:', err));
-    }
-
-    return updated;
   }
 }

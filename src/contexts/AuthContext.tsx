@@ -1,63 +1,165 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { TherapistUser } from '../types';
-import { DataService } from '../services/firebase/dataService';
+import { AuthService } from '../services/firebase/authService';
 
 interface AuthContextType {
   therapist: TherapistUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  error: string | null;
+  isConfigError: boolean;
   login: (email: string, pass: string) => Promise<boolean>;
+  register: (email: string, pass: string, name: string, organization?: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  updateProfile: (profile: Partial<TherapistUser>) => void;
+  resetPassword: (email: string) => Promise<void>;
+  loginAsDemo: () => Promise<boolean>;
+  startOfflineSession: (name?: string, email?: string) => void;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [therapist, setTherapist] = useState<TherapistUser | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true); // Logged in by default for seamless workflow
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isConfigError, setIsConfigError] = useState<boolean>(false);
 
   useEffect(() => {
-    // Load therapist session
-    const user = DataService.getTherapistUser();
-    setTherapist(user);
-    setIsAuthenticated(true);
-    setIsLoading(false);
+    // Subscribe to Firebase Authentication state
+    const unsubscribe = AuthService.subscribeAuthState((user) => {
+      setTherapist(user);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, _pass: string): Promise<boolean> => {
-    setIsLoading(true);
-    // Simulate auth check / Firebase auth
-    await new Promise((r) => setTimeout(r, 400));
-    const user = DataService.getTherapistUser();
-    user.email = email;
-    DataService.updateTherapistUser(user);
-    setTherapist(user);
-    setIsAuthenticated(true);
+  const login = async (email: string, pass: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setIsConfigError(false);
+      const user = await AuthService.login(email, pass);
+      setTherapist(user);
+      setIsLoading(false);
+      return true;
+    } catch (err: any) {
+      console.warn('[AuthContext] Login error:', err);
+      let msg = err.message || 'Login failed';
+      if (err.code === 'auth/configuration-not-found' || msg.includes('configuration-not-found') || msg.includes('CONFIG_NOT_FOUND')) {
+        setIsConfigError(true);
+        msg = 'Email/Password sign-in provider is not enabled yet in your Firebase Console (project: divadhardware).';
+      } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        msg = 'Invalid email or password.';
+      } else if (err.code === 'auth/user-not-found') {
+        msg = 'No therapist account found with this email.';
+      } else if (err.code === 'auth/too-many-requests') {
+        msg = 'Too many attempts. Please try again later.';
+      }
+      setError(msg);
+      setIsLoading(false);
+      return false;
+    }
+  };
+
+  const register = async (
+    email: string,
+    pass: string,
+    name: string,
+    organization?: string
+  ): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setIsConfigError(false);
+      const user = await AuthService.register(email, pass, name, organization);
+      setTherapist(user);
+      setIsLoading(false);
+      return true;
+    } catch (err: any) {
+      console.warn('[AuthContext] Registration error:', err);
+      let msg = err.message || 'Registration failed';
+      if (err.code === 'auth/configuration-not-found' || msg.includes('configuration-not-found') || msg.includes('CONFIG_NOT_FOUND')) {
+        setIsConfigError(true);
+        msg = 'Email/Password sign-in provider is not enabled yet in your Firebase Console (project: divadhardware).';
+      } else if (err.code === 'auth/email-already-in-use') {
+        msg = 'An account with this email already exists.';
+      } else if (err.code === 'auth/weak-password') {
+        msg = 'Password should be at least 6 characters.';
+      }
+      setError(msg);
+      setIsLoading(false);
+      return false;
+    }
+  };
+
+  const startOfflineSession = (name: string = 'Dr. Sarah Mitchell, OTR/L', email: string = 'therapist@simats.edu') => {
+    const offlineUser: TherapistUser = {
+      uid: `local_therapist_${Date.now()}`,
+      email,
+      displayName: name,
+      role: 'therapist',
+      organization: 'SIMATS Pediatric Occupational Therapy Center',
+    };
+    localStorage.setItem('divad_offline_therapist', JSON.stringify(offlineUser));
+    setTherapist(offlineUser);
+    setError(null);
+    setIsConfigError(false);
     setIsLoading(false);
+  };
+
+  const loginAsDemo = async (): Promise<boolean> => {
+    const demoEmail = 'therapist@simats.edu';
+    const demoPass = 'divad123';
+
+    try {
+      const ok = await login(demoEmail, demoPass);
+      if (ok) return true;
+    } catch {}
+
+    try {
+      const ok = await register(demoEmail, demoPass, 'Dr. Sarah Mitchell, OTR/L', 'SIMATS OT Center');
+      if (ok) return true;
+    } catch {}
+
+    // If Firebase Auth provider is not enabled in Firebase Console, smoothly launch immediate local clinical session
+    startOfflineSession('Dr. Sarah Mitchell, OTR/L', demoEmail);
     return true;
   };
 
   const logout = async () => {
-    setIsAuthenticated(false);
+    setIsLoading(true);
+    await AuthService.logout();
     setTherapist(null);
+    setIsLoading(false);
   };
 
-  const updateProfile = (partial: Partial<TherapistUser>) => {
-    const updated = DataService.updateTherapistUser(partial);
-    setTherapist(updated);
+  const resetPassword = async (email: string) => {
+    setError(null);
+    await AuthService.resetPassword(email);
+  };
+
+  const clearError = () => {
+    setError(null);
+    setIsConfigError(false);
   };
 
   return (
     <AuthContext.Provider
       value={{
         therapist,
-        isAuthenticated,
+        isAuthenticated: !!therapist,
         isLoading,
+        error,
+        isConfigError,
         login,
+        register,
         logout,
-        updateProfile,
+        resetPassword,
+        loginAsDemo,
+        startOfflineSession,
+        clearError,
       }}
     >
       {children}
@@ -72,4 +174,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-

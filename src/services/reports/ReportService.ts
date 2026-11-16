@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ActivitySession, ChildProfile, ASSISTANCE_LEVELS } from '../../types';
-import { DataService } from '../firebase/dataService';
+import { ActivitySession, ChildProfile, ASSISTANCE_LEVELS, TherapistUser } from '../../types';
+import { auth } from '../firebase/firebaseConfig';
 
 export class ReportService {
   /**
@@ -76,14 +76,19 @@ export class ReportService {
   /**
    * Export professional Pediatric OT Clinical PDF Report
    */
-  static exportChildReportPDF(child: ChildProfile, sessions: ActivitySession[]): void {
+  static exportChildReportPDF(
+    child: ChildProfile,
+    sessions: ActivitySession[],
+    therapist?: TherapistUser | null
+  ): void {
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
     });
 
-    const therapist = DataService.getTherapistUser();
+    const therapistName = therapist?.displayName || auth.currentUser?.displayName || 'Clinical Occupational Therapist';
+    const therapistOrg = therapist?.organization || 'SIMATS Occupational Therapy Center';
 
     // Header banner with DIVAD colors
     doc.setFillColor(2, 132, 199); // Blue
@@ -116,8 +121,8 @@ export class ReportService {
     );
     doc.text(`Preferred Instruction Language: ${child.preferredLanguage === 'ta' ? 'Tamil' : 'English'}`, 14, 63);
 
-    doc.text(`Supervising Therapist: ${therapist.displayName}`, 110, 45);
-    doc.text(`Facility: ${therapist.organization || 'SIMATS Occupational Therapy'}`, 110, 51);
+    doc.text(`Supervising Therapist: ${therapistName}`, 110, 45);
+    doc.text(`Facility: ${therapistOrg}`, 110, 51);
     doc.text(`Report Date: ${new Date().toLocaleDateString()}`, 110, 57);
     doc.text(`Total Sessions Logged: ${sessions.length}`, 110, 63);
 

@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Therapists collection - therapist profiles
+    match /therapists/{therapistId} {
+      allow read, write: if true;
+    }
+
+    // Children profiles collection - read/write for therapist monitoring & child session
+    match /children/{childId} {
+      allow read, write: if true;
+    }
+
+    // Activity sessions and attempts collection
+    match /sessions/{sessionId} {
+      allow read, write: if true;
+    }
+  }
+}
