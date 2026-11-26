@@ -132,11 +132,7 @@ export class AuthService {
    * Send password reset request
    */
   static async resetPassword(email: string): Promise<void> {
-    await fetch('http://localhost:8000/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    }).catch(() => {});
+    await apiClient.resetPassword(email);
   }
 
   /**

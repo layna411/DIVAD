@@ -9,6 +9,10 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
+  public getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   private getToken(): string | null {
     return localStorage.getItem('divad_token');
   }
@@ -172,6 +176,14 @@ class ApiClient {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(attempt),
+    }).catch(() => {});
+  }
+
+  async resetPassword(email: string): Promise<void> {
+    await fetch(`${this.baseUrl}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
     }).catch(() => {});
   }
 

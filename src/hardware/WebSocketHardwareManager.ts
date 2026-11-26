@@ -2,6 +2,9 @@ import { HardwareManager, HardwareStatusCallback, SensorEventCallback } from './
 import { HardwareStatus, SensorEvent, SensorEventType } from '../types';
 import { SensorEventFactory } from './SensorEvent';
 
+const DEFAULT_WS_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_WS_URL)
+  || 'ws://localhost:8000/api/hardware/ws';
+
 export class WebSocketHardwareManager implements HardwareManager {
   readonly type = 'websocket' as const;
 
@@ -25,7 +28,7 @@ export class WebSocketHardwareManager implements HardwareManager {
   private readonly maxHistoryLength = 100;
   private reconnectTimer: any = null;
 
-  constructor(wsUrl: string = 'ws://127.0.0.1:8765') {
+  constructor(wsUrl: string = DEFAULT_WS_URL) {
     this.wsUrl = wsUrl;
   }
 

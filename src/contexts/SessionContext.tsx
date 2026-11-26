@@ -124,6 +124,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         unsubscribeChildren = DataService.subscribeChildren((list) => {
           setChildrenList(list);
           setCurrentChild((prev) => {
+            if (list.length === 0) {
+              return null;
+            }
             if (!prev && list.length > 0) {
               setCurrentAssistanceLevelState(list[0].baselineAssistanceLevel);
               setLanguageState(list[0].preferredLanguage);

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Shield, Lock, Mail, User, Building, ArrowLeft, AlertCircle, CheckCircle2, Sparkles, ExternalLink } from 'lucide-react';
 import { soundEffects } from '../services/audio/SoundEffects';
 
 export const TherapistLoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { login, register, resetPassword, loginAsDemo, startOfflineSession, error, isConfigError, clearError, isLoading, isAuthenticated } = useAuth();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/therapist';
+  const { login, register, resetPassword, error, clearError, isLoading, isAuthenticated } = useAuth();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -17,9 +19,9 @@ export const TherapistLoginPage: React.FC = () => {
 
   React.useEffect(() => {
     if (isAuthenticated) {
-      navigate('/therapist');
+      navigate(redirectTo);
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,13 +32,13 @@ export const TherapistLoginPage: React.FC = () => {
       const success = await login(email, password);
       if (success) {
         soundEffects.playSuccessChime();
-        navigate('/therapist');
+        navigate(redirectTo);
       }
     } else if (mode === 'signup') {
       const success = await register(email, password, displayName, organization);
       if (success) {
         soundEffects.playCelebrationFanfare();
-        navigate('/therapist');
+        navigate(redirectTo);
       }
     } else if (mode === 'forgot') {
       try {
@@ -45,21 +47,6 @@ export const TherapistLoginPage: React.FC = () => {
         soundEffects.playStarPop();
       } catch (err: any) {}
     }
-  };
-
-  const handleDemoLogin = async () => {
-    clearError();
-    soundEffects.playTap();
-    await loginAsDemo();
-    soundEffects.playSuccessChime();
-    navigate('/therapist');
-  };
-
-  const handleOfflineBypass = () => {
-    soundEffects.playTap();
-    startOfflineSession(displayName || 'Dr. Sarah Mitchell, OTR/L', email || 'therapist@simats.edu');
-    soundEffects.playSuccessChime();
-    navigate('/therapist');
   };
 
   return (
@@ -126,31 +113,8 @@ export const TherapistLoginPage: React.FC = () => {
           </div>
         )}
 
-        {/* Clinical Authentication Helper */}
-        {isConfigError && (
-          <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-300 text-sky-900 space-y-2 text-xs">
-            <div className="flex items-start space-x-2">
-              <AlertCircle className="w-4 h-4 text-sky-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">Authentication Notice:</span>
-                <p className="mt-0.5 text-[11px] text-sky-800 leading-relaxed">
-                  Remote authentication service is synchronizing. You can sign in directly with clinical credentials or launch Instant Access.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleOfflineBypass}
-              className="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black text-xs shadow-sm transition"
-            >
-              ⚡ Enter Dashboard in Clinical Mode Now
-            </button>
-          </div>
-        )}
-
         {/* General Error or Success Alert */}
-        {error && !isConfigError && (
+        {error && (
           <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start space-x-2 text-xs">
             <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
             <span>{error}</span>
@@ -273,26 +237,6 @@ export const TherapistLoginPage: React.FC = () => {
             </button>
           )}
         </form>
-
-        {/* Quick Demo Access Divider */}
-        <div className="relative py-1">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-200" />
-          </div>
-          <div className="relative flex justify-center text-[10px] uppercase font-bold">
-            <span className="bg-white px-3 text-slate-400">Instant Access</span>
-          </div>
-        </div>
-
-        {/* One-Click Instant Sign-In */}
-        <button
-          onClick={handleDemoLogin}
-          type="button"
-          className="w-full py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 font-bold text-xs flex items-center justify-center space-x-2 transition"
-        >
-          <Sparkles className="w-4 h-4 text-amber-600" />
-          <span>One-Click Instant Therapist Sign-In</span>
-        </button>
       </div>
 
       {/* Footer */}

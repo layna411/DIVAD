@@ -13,13 +13,16 @@ class Settings(BaseSettings):
     DB_NAME: str = os.getenv("DB_NAME", "divad_db")
     
     # JWT Settings
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "divad_simats_pediatric_secret_key_2026")
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "divad_simats_pediatric_secret_key_2026_production_secure")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days
     
     # Server Host & Port
-    HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
+    
+    # CORS Origins
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173")
     
     class Config:
         env_file = ".env"

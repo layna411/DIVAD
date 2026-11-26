@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../contexts/SessionContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ACTIVITIES_DATA } from '../data/activitiesData';
 import { ActivityType } from '../types';
 import { Play, CheckCircle2, ArrowLeft, Sparkles, Star, Volume2, Shield } from 'lucide-react';
@@ -8,8 +9,10 @@ import { soundEffects } from '../services/audio/SoundEffects';
 
 export const ActivitySelectionPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const {
     currentChild,
+    childrenList,
     selectedActivities,
     toggleActivitySelection,
     selectAllActivities,
@@ -18,8 +21,19 @@ export const ActivitySelectionPage: React.FC = () => {
     setLanguage,
   } = useSession();
 
+  // Route protection: Must be logged in as therapist to access training activities
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/therapist/login?redirect=/activities');
+    }
+  }, [authLoading, isAuthenticated, navigate]);
+
   const handleStart = () => {
     soundEffects.playTap();
+    if (!currentChild) {
+      navigate('/therapist');
+      return;
+    }
     startSession(selectedActivities);
     navigate('/session');
   };

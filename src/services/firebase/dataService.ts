@@ -19,7 +19,7 @@ export class DataService {
         }
       } catch {}
     }
-    return baseKey;
+    return `${baseKey}_anonymous`;
   }
 
   /**
@@ -27,6 +27,13 @@ export class DataService {
    * Scoped strictly to the active authenticated therapist.
    */
   static subscribeChildren(callback: (children: ChildProfile[]) => void): Unsubscribe {
+    const rawUser = localStorage.getItem('divad_therapist') || localStorage.getItem('divad_offline_therapist');
+    if (!rawUser) {
+      // Unauthenticated: Emit empty children list
+      callback([]);
+      return () => {};
+    }
+
     // 1. Emit therapist-scoped cached children immediately
     const cached = this.getCachedChildren();
     callback(cached);
@@ -61,6 +68,13 @@ export class DataService {
    * Real-time subscription to activity sessions in Python/MySQL backend.
    */
   static subscribeSessions(callback: (sessions: ActivitySession[]) => void): Unsubscribe {
+    const rawUser = localStorage.getItem('divad_therapist') || localStorage.getItem('divad_offline_therapist');
+    if (!rawUser) {
+      // Unauthenticated: Emit empty sessions list
+      callback([]);
+      return () => {};
+    }
+
     const cached = this.getCachedSessions();
     callback(cached);
 
@@ -168,6 +182,8 @@ export class DataService {
 
   // Local Storage Cache Helpers
   static getCachedChildren(): ChildProfile[] {
+    const rawUser = localStorage.getItem('divad_therapist') || localStorage.getItem('divad_offline_therapist');
+    if (!rawUser) return [];
     const raw = localStorage.getItem(this.getScopedKey(STORAGE_KEYS.CHILDREN));
     if (!raw) return [];
     try {
@@ -178,6 +194,8 @@ export class DataService {
   }
 
   static getCachedSessions(): ActivitySession[] {
+    const rawUser = localStorage.getItem('divad_therapist') || localStorage.getItem('divad_offline_therapist');
+    if (!rawUser) return [];
     const raw = localStorage.getItem(this.getScopedKey(STORAGE_KEYS.SESSIONS));
     if (!raw) return [];
     try {

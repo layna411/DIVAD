@@ -23,9 +23,11 @@ import {
 import { soundEffects } from '../services/audio/SoundEffects';
 import { audioService } from '../services/audio/AudioService';
 import { CongratsCelebrationModal } from '../components/common/CongratsCelebrationModal';
+import { useAuth } from '../contexts/AuthContext';
 
 export const SessionPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const {
     currentSession,
     currentChild,
@@ -51,6 +53,13 @@ export const SessionPage: React.FC = () => {
   } = useSession();
 
   const [isAudioMuted, setIsAudioMuted] = useState(false);
+
+  // Route protection: Must be logged in as therapist
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/therapist/login');
+    }
+  }, [authLoading, isAuthenticated, navigate]);
 
   // If no session is active, navigate back to selection
   useEffect(() => {

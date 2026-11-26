@@ -1,22 +1,36 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Play, Shield, Heart, Award, ArrowRight } from 'lucide-react';
+import { Sparkles, Play, Shield, Heart, Award, ArrowRight, UserCheck } from 'lucide-react';
 import { useSession } from '../contexts/SessionContext';
+import { useAuth } from '../contexts/AuthContext';
 import { soundEffects } from '../services/audio/SoundEffects';
 
 export const WelcomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentChild, language, setLanguage } = useSession();
+  const { currentChild, childrenList, language, setLanguage } = useSession();
+  const { isAuthenticated, therapist } = useAuth();
 
   const handleStartChildMode = () => {
     soundEffects.playTap();
+    if (!isAuthenticated) {
+      navigate('/therapist/login?redirect=/activities');
+      return;
+    }
     soundEffects.playStarPop();
-    navigate('/activities');
+    if (!currentChild && (!childrenList || childrenList.length === 0)) {
+      navigate('/therapist');
+    } else {
+      navigate('/activities');
+    }
   };
 
   const handleOpenTherapistMode = () => {
     soundEffects.playTap();
-    navigate('/therapist');
+    if (!isAuthenticated) {
+      navigate('/therapist/login');
+    } else {
+      navigate('/therapist');
+    }
   };
 
   return (
@@ -65,14 +79,26 @@ export const WelcomePage: React.FC = () => {
           </div>
 
           {/* Therapist Button */}
-          <button
-            onClick={handleOpenTherapistMode}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shadow-md transition transform hover:scale-105 active:scale-95"
-          >
-            <Shield className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Therapist Portal</span>
-            <span className="sm:hidden">Therapist</span>
-          </button>
+          {isAuthenticated ? (
+            <button
+              onClick={handleOpenTherapistMode}
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md transition transform hover:scale-105 active:scale-95"
+              title="Signed in therapist portal"
+            >
+              <UserCheck className="w-3.5 h-3.5 text-emerald-200" />
+              <span className="hidden sm:inline">{therapist?.displayName || 'Therapist Portal'}</span>
+              <span className="sm:hidden">Portal</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleOpenTherapistMode}
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shadow-md transition transform hover:scale-105 active:scale-95"
+            >
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Therapist Login</span>
+              <span className="sm:hidden">Login</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -165,23 +191,6 @@ export const WelcomePage: React.FC = () => {
               ? 'ஜிப், பொத்தான், பக்கிள், ஸ்நாப் மற்றும் வெல்க்ரோ போன்றவற்றை எளிதாக இணைக்க கற்றுக்கொள்வோம்.'
               : "Let's learn to dress independently with fun step-by-step visual steps, audio guides, and real-time board sensors!"}
           </p>
-
-          {/* Active Child Profile Badge */}
-          {currentChild && (
-            <div className="inline-flex items-center space-x-2.5 px-4 py-2 bg-white/90 backdrop-blur rounded-2xl border border-slate-200 shadow-sm">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-pink-400 flex items-center justify-center text-white font-bold text-sm">
-                {currentChild.name.charAt(0)}
-              </div>
-              <div className="text-left">
-                <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
-                  {language === 'ta' ? 'பயிற்சி பெறும் குழந்தை' : 'Ready Learner'}
-                </div>
-                <div className="text-sm font-bold text-slate-800">
-                  {currentChild.name} ({currentChild.age} yrs)
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Big Start Button */}
           <div className="pt-2 flex flex-col sm:flex-row items-center gap-4 justify-center md:justify-start">

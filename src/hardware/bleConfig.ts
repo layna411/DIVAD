@@ -17,15 +17,17 @@ export interface BLEConfig {
   fallbackServiceUUIDs: string[];
 }
 
+const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env || {} : {};
+
 export const DEFAULT_BLE_CONFIG: BLEConfig = {
-  // ESP32 advertising name prefix
-  deviceNamePrefix: 'DIVAD',
+  // ESP32 advertising name prefix from .env
+  deviceNamePrefix: metaEnv.VITE_BLE_DEVICE_PREFIX || 'DIVAD',
   
-  // Custom 128-bit Primary Service UUID for DIVAD dressing board
-  serviceUUID: '4fafc201-1fb5-459e-8fcc-c5c9c331914b',
+  // Custom 128-bit Primary Service UUID for DIVAD dressing board from .env
+  serviceUUID: metaEnv.VITE_BLE_SERVICE_UUID || '4fafc201-1fb5-459e-8fcc-c5c9c331914b',
   
   // Characteristic for sensor notifications (ESP32 -> Web App)
-  sensorCharacteristicUUID: 'beb5483e-36e1-4688-b7f5-ea07361b26a8',
+  sensorCharacteristicUUID: metaEnv.VITE_BLE_SENSOR_CHAR_UUID || 'beb5483e-36e1-4688-b7f5-ea07361b26a8',
   
   // Characteristic for commands and feedback signals (Web App -> ESP32)
   commandCharacteristicUUID: '6e400002-b5a3-f393-e0a9-e50e24dcca9e',

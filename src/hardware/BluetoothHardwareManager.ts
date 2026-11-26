@@ -2,6 +2,7 @@ import { HardwareManager, HardwareStatusCallback, SensorEventCallback } from './
 import { HardwareStatus, SensorEvent, SensorEventType } from '../types';
 import { BLEConfig, DEFAULT_BLE_CONFIG, SENSOR_EVENT_BYTE_MAP } from './bleConfig';
 import { SensorEventFactory } from './SensorEvent';
+import { apiClient } from '../services/api/apiClient';
 
 export class BluetoothHardwareManager implements HardwareManager {
   readonly type = 'ble' as const;
@@ -378,20 +379,14 @@ export class BluetoothHardwareManager implements HardwareManager {
     this.notifyStatusListeners();
 
     // Asynchronously log sensor telemetry to Python/MySQL backend
-    try {
-      fetch('http://localhost:8000/api/hardware/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventType: event.event,
-          source: event.source,
-          deviceId: event.deviceId || 'ESP32-BLE',
-          opcode: event.payload?.opcode,
-          rawData: JSON.stringify(event.payload || {}),
-          timestamp: event.timestamp,
-        }),
-      }).catch(() => {});
-    } catch {}
+    apiClient.logSensorEvent({
+      eventType: event.event,
+      source: event.source,
+      deviceId: event.deviceId || 'ESP32-BLE',
+      opcode: event.payload?.opcode,
+      rawData: JSON.stringify(event.payload || {}),
+      timestamp: event.timestamp,
+    }).catch(() => {});
   }
 
   private notifyEventListeners(event: SensorEvent): void {

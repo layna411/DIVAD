@@ -24,9 +24,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Enable CORS for frontend applications
+# Enable CORS for frontend applications from environment config
+allowed_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=allowed_origins,
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
