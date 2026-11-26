@@ -23,15 +23,15 @@ interface HardwareContextType {
 const HardwareContext = createContext<HardwareContextType | undefined>(undefined);
 
 export const HardwareProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Start with SimulatedHardwareManager by default as requested
-  const [providerType, setProviderType] = useState<'simulation' | 'ble' | 'websocket'>('simulation');
-  const managerRef = useRef<HardwareManager>(new SimulatedHardwareManager(true));
+  // Check Web Bluetooth support
+  const isWebBluetoothSupported = typeof navigator !== 'undefined' && 'bluetooth' in navigator;
+
+  // Default to original physical BLE hardware manager
+  const [providerType, setProviderType] = useState<'simulation' | 'ble' | 'websocket'>('ble');
+  const managerRef = useRef<HardwareManager>(new BluetoothHardwareManager());
   const [status, setStatus] = useState<HardwareStatus>(managerRef.current.getStatus());
   const [history, setHistory] = useState<SensorEvent[]>([]);
   const listenersRef = useRef<Set<SensorEventCallback>>(new Set());
-
-  // Check Web Bluetooth support
-  const isWebBluetoothSupported = typeof navigator !== 'undefined' && 'bluetooth' in navigator;
 
   // Setup listeners on active manager
   const bindManagerListeners = useCallback((mgr: HardwareManager) => {

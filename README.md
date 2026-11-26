@@ -58,7 +58,11 @@ The application interface matches the physical fabric DIVAD board:
 - **Audio**: Web Speech API (`en-US`, `ta-IN`), Web Audio API tone and chime synthesizer.
 - **Reports**: jsPDF, jsPDF-AutoTable.
 - **Celebration**: Canvas-Confetti.
-- **Backend / Data**: Real-time Firebase Authentication, Firestore, and Storage (`divadhardware` project) with integrated local offline fallback storage.
+- **Backend / Database**:
+  - Python FastAPI high-performance asynchronous REST & WebSocket API (`backend/`).
+  - MySQL Database (`divad_db`) with tables: `therapists`, `children`, `sessions`, `session_attempts`, `sensor_logs`.
+  - Credentials: User `root`, Password `layn`, Port `3307` (with auto fallback to `3306`).
+  - Integrated local client persistence cache for zero-downtime offline sessions.
 
 ---
 
@@ -119,7 +123,20 @@ DIVAD/
 
 ## 🏃 Running the Application
 
-### 1. Development Server
+### Option A: One-Click Startup (Frontend + Backend)
+Double-click `start_divad.bat` or run:
+```bash
+.\start_divad.bat
+```
+
+### Option B: Separate Terminal Commands
+1. **Start Python FastAPI Backend**:
+```bash
+python backend/run_server.py
+```
+Backend API will be live on [http://127.0.0.1:8000](http://127.0.0.1:8000) (Interactive Swagger Docs at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)).
+
+2. **Start React Frontend**:
 ```bash
 npm run dev
 ```

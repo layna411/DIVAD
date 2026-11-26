@@ -1,195 +1,136 @@
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  sendPasswordResetEmail,
-  onAuthStateChanged,
-  updateProfile as updateFirebaseProfile,
-  User,
-} from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, firestore } from './firebaseConfig';
 import { TherapistUser } from '../../types';
+import { apiClient } from '../api/apiClient';
+
+const STORAGE_KEYS = {
+  THERAPIST: 'divad_offline_therapist',
+  TOKEN: 'divad_token',
+};
+
+type AuthCallback = (therapist: TherapistUser | null) => void;
+const subscribers = new Set<AuthCallback>();
+
+function notifySubscribers(user: TherapistUser | null) {
+  subscribers.forEach((cb) => {
+    try {
+      cb(user);
+    } catch (e) {
+      console.error('[AuthService] Subscriber error:', e);
+    }
+  });
+}
 
 export class AuthService {
   /**
-   * Listen to Firebase Auth state changes and fetch/create therapist profile in Firestore
+   * Listen to Auth state changes (Python/MySQL backend + cached local profile)
    */
-  static subscribeAuthState(callback: (therapist: TherapistUser | null) => void): () => void {
-    if (!auth) {
-      const offline = localStorage.getItem('divad_offline_therapist');
-      callback(offline ? JSON.parse(offline) : null);
-      return () => {};
-    }
+  static subscribeAuthState(callback: AuthCallback): () => void {
+    subscribers.add(callback);
 
-    // Check if offline therapist was saved
-    const offlineRaw = localStorage.getItem('divad_offline_therapist');
-    if (offlineRaw) {
-      try {
-        callback(JSON.parse(offlineRaw));
-      } catch {}
-    }
+    // 1. Immediately emit cached therapist for instant render
+    const cached = this.getCachedTherapist();
+    callback(cached);
 
-    return onAuthStateChanged(auth, async (firebaseUser: User | null) => {
-      if (!firebaseUser) {
-        const offline = localStorage.getItem('divad_offline_therapist');
-        callback(offline ? JSON.parse(offline) : null);
-        return;
+    // 2. Validate token against Python backend asynchronously
+    apiClient.getMe().then((serverUser) => {
+      if (serverUser) {
+        localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(serverUser));
+        notifySubscribers(serverUser);
       }
-
-      // If user is authenticated in Firebase, clear offline temporary session
-      localStorage.removeItem('divad_offline_therapist');
-
-      try {
-        let therapistProfile: TherapistUser | null = null;
-        if (firestore) {
-          try {
-            const docRef = doc(firestore, 'therapists', firebaseUser.uid);
-            const docSnap = await getDoc(docRef);
-
-            if (docSnap.exists()) {
-              therapistProfile = docSnap.data() as TherapistUser;
-            } else {
-              therapistProfile = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email || '',
-                displayName: firebaseUser.displayName || 'Therapist',
-                role: 'therapist',
-                organization: 'SIMATS Pediatric Occupational Therapy Center',
-              };
-              await setDoc(docRef, therapistProfile);
-            }
-          } catch (e) {
-            console.warn('[AuthService] Firestore profile access notice:', e);
-          }
-        }
-
-        if (!therapistProfile) {
-          therapistProfile = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            displayName: firebaseUser.displayName || 'Therapist',
-            role: 'therapist',
-            organization: 'SIMATS Pediatric Occupational Therapy Center',
-          };
-        }
-
-        callback(therapistProfile);
-      } catch (err) {
-        console.warn('[AuthService] Error fetching therapist profile:', err);
-        callback({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          displayName: firebaseUser.displayName || 'Therapist',
-          role: 'therapist',
-          organization: 'SIMATS Pediatric Occupational Therapy Center',
-        });
-      }
+    }).catch(() => {
+      // Backend may be offline; cached profile remains active
     });
+
+    return () => {
+      subscribers.delete(callback);
+    };
   }
 
   /**
-   * Log in with Email and Password via Firebase Authentication
+   * Log in with Email and Password via Python + MySQL Backend
    */
   static async login(email: string, pass: string): Promise<TherapistUser> {
-    if (!auth) throw new Error('Firebase Auth is not initialized');
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), pass);
-      const firebaseUser = userCredential.user;
-
-      let profile: TherapistUser = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email || email,
-        displayName: firebaseUser.displayName || 'Therapist',
-        role: 'therapist',
-        organization: 'SIMATS Pediatric Occupational Therapy Center',
-      };
-
-      if (firestore) {
-        try {
-          const docRef = doc(firestore, 'therapists', firebaseUser.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            profile = docSnap.data() as TherapistUser;
-          } else {
-            await setDoc(docRef, profile);
-          }
-        } catch (e) {
-          console.warn('[AuthService] Could not access therapists collection:', e);
-        }
-      }
-
-      return profile;
+      const { user } = await apiClient.login(email, pass);
+      localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(user));
+      notifySubscribers(user);
+      return user;
     } catch (err: any) {
-      if (err.code === 'auth/configuration-not-found' || err.message?.includes('configuration-not-found')) {
-        const error = new Error('CONFIG_NOT_FOUND: Email/Password provider is not enabled in Firebase Console (divadhardware).');
-        (error as any).code = 'auth/configuration-not-found';
-        throw error;
-      }
+      console.warn('[AuthService] Backend login attempt error:', err);
       throw err;
     }
   }
 
   /**
-   * Register a new therapist account in Firebase Auth and Firestore
+   * Register a new therapist account in Python + MySQL Backend
    */
   static async register(
     email: string,
     pass: string,
     displayName: string,
-    organization: string = 'SIMATS Center'
+    organization: string = 'SIMATS Pediatric Occupational Therapy Center'
   ): Promise<TherapistUser> {
-    if (!auth) throw new Error('Firebase Auth is not initialized');
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), pass);
-      const firebaseUser = userCredential.user;
-
-      try {
-        await updateFirebaseProfile(firebaseUser, { displayName });
-      } catch {}
-
-      const profile: TherapistUser = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email || email,
-        displayName: displayName.trim(),
-        role: 'therapist',
-        organization: organization.trim(),
-      };
-
-      if (firestore) {
-        try {
-          await setDoc(doc(firestore, 'therapists', firebaseUser.uid), profile);
-        } catch (e) {
-          console.warn('[AuthService] Could not save to therapists collection:', e);
-        }
-      }
-
-      return profile;
+      const { user } = await apiClient.register(email, pass, displayName, organization);
+      localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(user));
+      notifySubscribers(user);
+      return user;
     } catch (err: any) {
-      if (err.code === 'auth/configuration-not-found' || err.message?.includes('configuration-not-found')) {
-        const error = new Error('CONFIG_NOT_FOUND: Email/Password provider is not enabled in Firebase Console (divadhardware).');
-        (error as any).code = 'auth/configuration-not-found';
-        throw error;
-      }
+      console.warn('[AuthService] Backend register attempt error:', err);
       throw err;
     }
   }
 
   /**
-   * Send password reset email
+   * One-Click Instant Demo Login via Python Backend
+   */
+  static async loginAsDemo(): Promise<TherapistUser> {
+    try {
+      const { user } = await apiClient.demoLogin();
+      localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(user));
+      notifySubscribers(user);
+      return user;
+    } catch {
+      // Fallback local demo profile
+      const offlineUser: TherapistUser = {
+        uid: 'th_demo_mitchell',
+        email: 'therapist@simats.edu',
+        displayName: 'Dr. Sarah Mitchell, OTR/L',
+        role: 'therapist',
+        organization: 'SIMATS Pediatric Occupational Therapy Center',
+      };
+      localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(offlineUser));
+      notifySubscribers(offlineUser);
+      return offlineUser;
+    }
+  }
+
+  /**
+   * Send password reset request
    */
   static async resetPassword(email: string): Promise<void> {
-    if (!auth) throw new Error('Firebase Auth is not initialized');
-    await sendPasswordResetEmail(auth, email.trim());
+    await fetch('http://localhost:8000/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }).catch(() => {});
   }
 
   /**
    * Log out
    */
   static async logout(): Promise<void> {
-    localStorage.removeItem('divad_offline_therapist');
-    if (auth && auth.currentUser) {
-      await signOut(auth);
+    localStorage.removeItem(STORAGE_KEYS.THERAPIST);
+    localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    notifySubscribers(null);
+  }
+
+  static getCachedTherapist(): TherapistUser | null {
+    const raw = localStorage.getItem(STORAGE_KEYS.THERAPIST);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
     }
   }
 }

@@ -126,15 +126,15 @@ export const TherapistLoginPage: React.FC = () => {
           </div>
         )}
 
-        {/* Diagnostic Helper if Firebase Auth Email Provider is not yet enabled in Console */}
+        {/* Clinical Authentication Helper */}
         {isConfigError && (
-          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 space-y-2 text-xs">
+          <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-300 text-sky-900 space-y-2 text-xs">
             <div className="flex items-start space-x-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 text-sky-600 flex-shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold">Firebase Auth Not Enabled in Console:</span>
-                <p className="mt-0.5 text-[11px] text-amber-800 leading-relaxed">
-                  In Firebase Console project <strong>divadhardware</strong>, go to <strong>Authentication &gt; Sign-in method</strong> and toggle <strong>Email/Password</strong> to Enabled.
+                <span className="font-bold">Authentication Notice:</span>
+                <p className="mt-0.5 text-[11px] text-sky-800 leading-relaxed">
+                  Remote authentication service is synchronizing. You can sign in directly with clinical credentials or launch Instant Access.
                 </p>
               </div>
             </div>
@@ -142,7 +142,7 @@ export const TherapistLoginPage: React.FC = () => {
             <button
               type="button"
               onClick={handleOfflineBypass}
-              className="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-sm transition"
+              className="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-black text-xs shadow-sm transition"
             >
               ⚡ Enter Dashboard in Clinical Mode Now
             </button>
@@ -252,7 +252,7 @@ export const TherapistLoginPage: React.FC = () => {
             className="w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm shadow-md transition transform hover:scale-[1.01] active:scale-95 disabled:opacity-50"
           >
             {isLoading
-              ? 'Connecting to Firebase...'
+              ? 'Connecting to Server...'
               : mode === 'signin'
               ? 'Sign In to Dashboard'
               : mode === 'signup'

@@ -1,15 +1,7 @@
-import { ChildProfile, ActivitySession, TherapistUser } from '../../types';
-import { firestore } from './firebaseConfig';
-import {
-  collection,
-  doc,
-  setDoc,
-  deleteDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  Unsubscribe,
-} from 'firebase/firestore';
+import { ChildProfile, ActivitySession } from '../../types';
+import { apiClient } from '../api/apiClient';
+
+export type Unsubscribe = () => void;
 
 const STORAGE_KEYS = {
   CHILDREN: 'divad_children',
@@ -18,70 +10,44 @@ const STORAGE_KEYS = {
 
 export class DataService {
   /**
-   * Real-time subscription to children collection in Firestore.
-   * Emits whenever a child is added, edited, or removed.
+   * Real-time subscription to children collection in Python/MySQL backend.
+   * Loads local cache instantly, fetches from MySQL, and periodically syncs updates.
    */
   static subscribeChildren(callback: (children: ChildProfile[]) => void): Unsubscribe {
-    // Check local cache first for instant initial render
+    // 1. Emit cached children immediately for instant render
     const cached = this.getCachedChildren();
     if (cached.length > 0) {
       callback(cached);
     }
 
-    if (!firestore) {
-      callback(cached);
-      return () => {};
-    }
+    let isSubscribed = true;
 
-    let isTerminated = false;
-    let unsub: Unsubscribe | null = null;
-
-    try {
-      const childrenCol = collection(firestore, 'children');
-      const q = query(childrenCol, orderBy('createdAt', 'desc'));
-
-      unsub = onSnapshot(
-        q,
-        (snapshot) => {
-          const children: ChildProfile[] = [];
-          snapshot.forEach((docSnap) => {
-            children.push(docSnap.data() as ChildProfile);
-          });
-
-          // Update local cache
+    const fetchLatest = async () => {
+      try {
+        const children = await apiClient.getChildren();
+        if (isSubscribed && children) {
           localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(children));
           callback(children);
-        },
-        (error) => {
-          isTerminated = true;
-          if (error.code === 'permission-denied') {
-            console.info('[Firestore] Permission notice: Waiting for Firestore rules or authentication in Firebase Console. Local clinical persistence active.');
-          } else {
-            console.warn('[Firestore] Realtime children listener notice:', error);
-          }
-          // Fallback to local persistence
-          callback(this.getCachedChildren());
         }
-      );
-    } catch (err) {
-      console.warn('[Firestore] Error subscribing to children:', err);
-      callback(cached);
-      return () => {};
-    }
+      } catch (err) {
+        // Backend unavailable; local persistence stays active
+      }
+    };
+
+    // Initial fetch
+    fetchLatest();
+
+    // Periodic live sync every 4 seconds
+    const intervalId = setInterval(fetchLatest, 4000);
 
     return () => {
-      if (unsub && !isTerminated) {
-        try {
-          unsub();
-        } catch {
-          // Suppress any internal Firestore SDK watch stream assertion failures on unmount
-        }
-      }
+      isSubscribed = false;
+      clearInterval(intervalId);
     };
   }
 
   /**
-   * Real-time subscription to sessions collection in Firestore.
+   * Real-time subscription to activity sessions in Python/MySQL backend.
    */
   static subscribeSessions(callback: (sessions: ActivitySession[]) => void): Unsubscribe {
     const cached = this.getCachedSessions();
@@ -89,59 +55,31 @@ export class DataService {
       callback(cached);
     }
 
-    if (!firestore) {
-      callback(cached);
-      return () => {};
-    }
+    let isSubscribed = true;
 
-    let isTerminated = false;
-    let unsub: Unsubscribe | null = null;
-
-    try {
-      const sessionsCol = collection(firestore, 'sessions');
-      const q = query(sessionsCol, orderBy('startTime', 'desc'));
-
-      unsub = onSnapshot(
-        q,
-        (snapshot) => {
-          const sessions: ActivitySession[] = [];
-          snapshot.forEach((docSnap) => {
-            sessions.push(docSnap.data() as ActivitySession);
-          });
-
-          // Update local cache
+    const fetchLatest = async () => {
+      try {
+        const sessions = await apiClient.getSessions();
+        if (isSubscribed && sessions) {
           localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
           callback(sessions);
-        },
-        (error) => {
-          isTerminated = true;
-          if (error.code === 'permission-denied') {
-            console.info('[Firestore] Permission notice: Waiting for Firestore rules. Local session persistence active.');
-          } else {
-            console.warn('[Firestore] Realtime sessions listener notice:', error);
-          }
-          callback(this.getCachedSessions());
         }
-      );
-    } catch (err) {
-      console.warn('[Firestore] Error subscribing to sessions:', err);
-      callback(cached);
-      return () => {};
-    }
+      } catch (err) {
+        // Backend unavailable; local persistence active
+      }
+    };
+
+    fetchLatest();
+    const intervalId = setInterval(fetchLatest, 4000);
 
     return () => {
-      if (unsub && !isTerminated) {
-        try {
-          unsub();
-        } catch {
-          // Suppress any internal Firestore SDK watch stream assertion failures on unmount
-        }
-      }
+      isSubscribed = false;
+      clearInterval(intervalId);
     };
   }
 
   /**
-   * Save (create or update) a child profile directly in Firestore
+   * Save (create or update) a child profile in Python + MySQL Backend
    */
   static async saveChild(
     child: Omit<ChildProfile, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
@@ -157,7 +95,7 @@ export class DataService {
       active: child.active ?? true,
     };
 
-    // Update local cache immediately
+    // Update local cache immediately for instant UI responsiveness
     const cached = this.getCachedChildren();
     const existingIndex = cached.findIndex((c) => c.id === id);
     if (existingIndex >= 0) {
@@ -167,42 +105,37 @@ export class DataService {
     }
     localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(cached));
 
-    // Save to Firestore
-    if (firestore) {
-      try {
-        await setDoc(doc(firestore, 'children', id), childDoc);
-        console.log(`[Firestore] Child document ${id} saved successfully.`);
-      } catch (err) {
-        console.warn('[Firestore] Notice: Child document saved locally. Firestore sync pending permissions:', err);
-      }
+    // Save to Python + MySQL Backend
+    try {
+      const saved = await apiClient.saveChild(childDoc);
+      console.log(`[DataService] Child document ${id} saved to MySQL successfully.`);
+      return saved;
+    } catch (err) {
+      console.warn('[DataService] Notice: Child saved locally. MySQL sync error:', err);
+      return childDoc;
     }
-
-    return childDoc;
   }
 
   /**
-   * Delete a child profile from Firestore
+   * Delete a child profile from Python + MySQL Backend
    */
   static async deleteChild(id: string): Promise<boolean> {
     // Update local cache immediately
     const cached = this.getCachedChildren().filter((c) => c.id !== id);
     localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(cached));
 
-    // Delete from Firestore
-    if (firestore) {
-      try {
-        await deleteDoc(doc(firestore, 'children', id));
-        console.log(`[Firestore] Child document ${id} deleted.`);
-      } catch (err) {
-        console.warn('[Firestore] Notice: Child deleted locally. Firestore sync pending permissions:', err);
-      }
+    try {
+      await apiClient.deleteChild(id);
+      console.log(`[DataService] Child document ${id} deleted from MySQL.`);
+    } catch (err) {
+      console.warn('[DataService] Notice: Child deleted locally. MySQL sync error:', err);
     }
 
     return true;
   }
 
   /**
-   * Save an activity session in Firestore
+   * Save an activity session in Python + MySQL Backend
    */
   static async saveSession(session: ActivitySession): Promise<void> {
     // Update local cache immediately
@@ -215,14 +148,12 @@ export class DataService {
     }
     localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(cached));
 
-    // Save to Firestore
-    if (firestore) {
-      try {
-        await setDoc(doc(firestore, 'sessions', session.id), session);
-        console.log(`[Firestore] Session document ${session.id} saved.`);
-      } catch (err) {
-        console.warn('[Firestore] Notice: Session saved locally. Firestore sync pending permissions:', err);
-      }
+    // Save to Python + MySQL Backend
+    try {
+      await apiClient.saveSession(session);
+      console.log(`[DataService] Session document ${session.id} saved to MySQL.`);
+    } catch (err) {
+      console.warn('[DataService] Notice: Session saved locally. MySQL sync error:', err);
     }
   }
 

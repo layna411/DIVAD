@@ -39,10 +39,10 @@ export class BluetoothHardwareManager implements HardwareManager {
     return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
   }
 
-  async connect(): Promise<boolean> {
+  async connect(allowAllDevices: boolean = false): Promise<boolean> {
     if (!this.isSupported()) {
       this.updateStatus({
-        error: 'Web Bluetooth is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Bluefy on iOS.',
+        error: 'Web Bluetooth is not supported in this browser. Please use Google Chrome or Microsoft Edge.',
       });
       return false;
     }
@@ -50,22 +50,47 @@ export class BluetoothHardwareManager implements HardwareManager {
     try {
       this.updateStatus({ isScanning: true, error: null });
 
-      // Request device with name filter or acceptAllDevices with optional service
-      this.device = await navigator.bluetooth.requestDevice({
-        filters: [
-          { namePrefix: this.config.deviceNamePrefix },
-          { name: 'DIVAD-ESP32' },
-          { name: 'DIVAD' },
-        ],
-        optionalServices: [
-          this.config.serviceUUID.toLowerCase(),
-          'battery_service',
-          'device_information',
-        ],
-      });
+      const optionalServices = [
+        this.config.serviceUUID.toLowerCase(),
+        '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART Service fallback
+        'battery_service',
+        'device_information',
+      ];
+
+      // Request device with namePrefix filters, or allow scanning all devices
+      if (allowAllDevices) {
+        this.device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices,
+        });
+      } else {
+        try {
+          this.device = await navigator.bluetooth.requestDevice({
+            filters: [
+              { namePrefix: 'DIVAD' },
+              { namePrefix: 'divad' },
+              { namePrefix: 'ESP32' },
+              { namePrefix: 'esp32' },
+              { services: [this.config.serviceUUID.toLowerCase()] },
+            ],
+            optionalServices,
+          });
+        } catch (filterErr: any) {
+          // If no device matched the filter, provide instant fallback to broad device chooser
+          if (filterErr.name === 'NotFoundError' && !filterErr.message?.includes('User cancelled')) {
+            console.log('[BLE] Filter search empty, opening full BLE device list...');
+            this.device = await navigator.bluetooth.requestDevice({
+              acceptAllDevices: true,
+              optionalServices,
+            });
+          } else {
+            throw filterErr;
+          }
+        }
+      }
 
       if (!this.device) {
-        this.updateStatus({ isScanning: false, error: 'No DIVAD device selected.' });
+        this.updateStatus({ isScanning: false, error: 'No DIVAD ESP32 device selected.' });
         return false;
       }
 
@@ -73,31 +98,54 @@ export class BluetoothHardwareManager implements HardwareManager {
       this.shouldAutoReconnect = true;
 
       // Connect to GATT
-      this.server = await this.device.gatt?.connect() || null;
+      this.server = (await this.device.gatt?.connect()) || null;
       if (!this.server) {
         throw new Error('Failed to connect to GATT Server');
       }
 
-      // Discover custom primary service
-      const service = await this.server.getPrimaryService(this.config.serviceUUID.toLowerCase());
+      // Discover Primary Service: Try custom DIVAD service first, then Nordic UART service
+      let service: BluetoothRemoteGATTService | null = null;
+      try {
+        service = await this.server.getPrimaryService(this.config.serviceUUID.toLowerCase());
+      } catch {
+        try {
+          service = await this.server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+        } catch {
+          throw new Error('Neither DIVAD Primary Service nor Nordic UART Service was found on this BLE device.');
+        }
+      }
 
-      // Get sensor notification characteristic
-      this.sensorCharacteristic = await service.getCharacteristic(
-        this.config.sensorCharacteristicUUID.toLowerCase()
-      );
+      // Discover Sensor Notification Characteristic
+      try {
+        this.sensorCharacteristic = await service.getCharacteristic(
+          this.config.sensorCharacteristicUUID.toLowerCase()
+        );
+      } catch {
+        // Fallback to NUS TX characteristic
+        this.sensorCharacteristic = await service.getCharacteristic(
+          '6e400003-b5a3-f393-e0a9-e50e24dcca9e'
+        );
+      }
+
       await this.sensorCharacteristic.startNotifications();
       this.sensorCharacteristic.addEventListener(
         'characteristicvaluechanged',
         this.handleSensorDataChanged
       );
 
-      // Get command characteristic (optional for sending commands)
+      // Discover Command Characteristic (optional for sending commands)
       try {
         this.commandCharacteristic = await service.getCharacteristic(
           this.config.commandCharacteristicUUID.toLowerCase()
         );
-      } catch (e) {
-        console.warn('[BLE] Command characteristic not found or optional', e);
+      } catch {
+        try {
+          this.commandCharacteristic = await service.getCharacteristic(
+            '6e400002-b5a3-f393-e0a9-e50e24dcca9e'
+          );
+        } catch {
+          console.warn('[BLE] Command characteristic not present on device (sensors only)');
+        }
       }
 
       // Try reading battery level if available
@@ -112,7 +160,7 @@ export class BluetoothHardwareManager implements HardwareManager {
       }
 
       // Try reading firmware revision string
-      let firmwareVersion = 'ESP32-BLE-1.0';
+      let firmwareVersion = 'ESP32-DIVAD-v1.0';
       try {
         const infoService = await this.server.getPrimaryService('device_information');
         const fwChar = await infoService.getCharacteristic('firmware_revision_string');
@@ -128,7 +176,7 @@ export class BluetoothHardwareManager implements HardwareManager {
         isScanning: false,
         deviceName: this.device.name || 'DIVAD-ESP32',
         deviceId: this.device.id,
-        batteryLevel: batteryLevel ?? 88,
+        batteryLevel: batteryLevel ?? 92,
         firmwareVersion: firmwareVersion || 'ESP32-DIVAD-v1.0',
         connectionType: 'ble',
         error: null,
@@ -226,7 +274,6 @@ export class BluetoothHardwareManager implements HardwareManager {
   }
 
   emitSimulatedEvent(event: SensorEventType, payload?: Record<string, any>): void {
-    // When in BLE mode, allowing test injection into the same stream
     const sensorEvent = SensorEventFactory.create(
       event,
       'ble',
@@ -259,7 +306,7 @@ export class BluetoothHardwareManager implements HardwareManager {
     console.warn('[BLE] Device disconnected from GATT');
     this.updateStatus({
       isConnected: false,
-      error: 'Device disconnected unexpectedly.',
+      error: 'ESP32 device disconnected unexpectedly.',
     });
 
     const disconnEvent = SensorEventFactory.create('DEVICE_DISCONNECTED', 'ble', {
@@ -281,12 +328,25 @@ export class BluetoothHardwareManager implements HardwareManager {
     if (!this.device || !this.shouldAutoReconnect) return;
     try {
       this.updateStatus({ isScanning: true, error: 'Reconnecting to DIVAD ESP32...' });
-      this.server = await this.device.gatt?.connect() || null;
+      this.server = (await this.device.gatt?.connect()) || null;
       if (this.server) {
-        const service = await this.server.getPrimaryService(this.config.serviceUUID.toLowerCase());
-        this.sensorCharacteristic = await service.getCharacteristic(
-          this.config.sensorCharacteristicUUID.toLowerCase()
-        );
+        let service: BluetoothRemoteGATTService | null = null;
+        try {
+          service = await this.server.getPrimaryService(this.config.serviceUUID.toLowerCase());
+        } catch {
+          service = await this.server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+        }
+
+        try {
+          this.sensorCharacteristic = await service.getCharacteristic(
+            this.config.sensorCharacteristicUUID.toLowerCase()
+          );
+        } catch {
+          this.sensorCharacteristic = await service.getCharacteristic(
+            '6e400003-b5a3-f393-e0a9-e50e24dcca9e'
+          );
+        }
+
         await this.sensorCharacteristic.startNotifications();
         this.sensorCharacteristic.addEventListener(
           'characteristicvaluechanged',
@@ -304,7 +364,7 @@ export class BluetoothHardwareManager implements HardwareManager {
       this.updateStatus({
         isConnected: false,
         isScanning: false,
-        error: 'Auto-reconnect failed. Please click Connect to reconnect.',
+        error: 'Auto-reconnect failed. Click Connect to re-pair with ESP32.',
       });
     }
   }
@@ -316,6 +376,22 @@ export class BluetoothHardwareManager implements HardwareManager {
     }
     this.status.lastEvent = event;
     this.notifyStatusListeners();
+
+    // Asynchronously log sensor telemetry to Python/MySQL backend
+    try {
+      fetch('http://localhost:8000/api/hardware/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: event.event,
+          source: event.source,
+          deviceId: event.deviceId || 'ESP32-BLE',
+          opcode: event.payload?.opcode,
+          rawData: JSON.stringify(event.payload || {}),
+          timestamp: event.timestamp,
+        }),
+      }).catch(() => {});
+    } catch {}
   }
 
   private notifyEventListeners(event: SensorEvent): void {
@@ -344,4 +420,3 @@ export class BluetoothHardwareManager implements HardwareManager {
     this.notifyStatusListeners();
   }
 }
-

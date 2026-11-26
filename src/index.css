@@ -28,3 +28,51 @@
   background: #94a3b8;
 }
 
+/* Celebratory Boy & Girl Baby Animations */
+@keyframes bounce-cheer {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-10px) scale(1.04);
+  }
+}
+
+@keyframes pop-star {
+  0% {
+    transform: scale(0) rotate(-45deg);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.25) rotate(10deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+
+@keyframes rainbow-glow {
+  0% {
+    filter: drop-shadow(0 0 12px rgba(234, 179, 8, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 22px rgba(56, 189, 248, 0.8));
+  }
+  100% {
+    filter: drop-shadow(0 0 12px rgba(234, 179, 8, 0.6));
+  }
+}
+
+.animate-bounce-cheer {
+  animation: bounce-cheer 1.8s ease-in-out infinite;
+}
+
+.animate-pop-star {
+  animation: pop-star 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.animate-rainbow-glow {
+  animation: rainbow-glow 3s ease-in-out infinite;
+}
+

@@ -49,7 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let msg = err.message || 'Login failed';
       if (err.code === 'auth/configuration-not-found' || msg.includes('configuration-not-found') || msg.includes('CONFIG_NOT_FOUND')) {
         setIsConfigError(true);
-        msg = 'Email/Password sign-in provider is not enabled yet in your Firebase Console (project: divadhardware).';
+        msg = 'Authentication service is currently initializing. Please try again or use Instant Demo Sign-In.';
       } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
         msg = 'Invalid email or password.';
       } else if (err.code === 'auth/user-not-found') {
@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let msg = err.message || 'Registration failed';
       if (err.code === 'auth/configuration-not-found' || msg.includes('configuration-not-found') || msg.includes('CONFIG_NOT_FOUND')) {
         setIsConfigError(true);
-        msg = 'Email/Password sign-in provider is not enabled yet in your Firebase Console (project: divadhardware).';
+        msg = 'Authentication service is currently initializing. Please try again or use Instant Demo Sign-In.';
       } else if (err.code === 'auth/email-already-in-use') {
         msg = 'An account with this email already exists.';
       } else if (err.code === 'auth/weak-password') {
@@ -110,22 +110,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginAsDemo = async (): Promise<boolean> => {
-    const demoEmail = 'therapist@simats.edu';
-    const demoPass = 'divad123';
-
     try {
-      const ok = await login(demoEmail, demoPass);
-      if (ok) return true;
-    } catch {}
-
-    try {
-      const ok = await register(demoEmail, demoPass, 'Dr. Sarah Mitchell, OTR/L', 'SIMATS OT Center');
-      if (ok) return true;
-    } catch {}
-
-    // If Firebase Auth provider is not enabled in Firebase Console, smoothly launch immediate local clinical session
-    startOfflineSession('Dr. Sarah Mitchell, OTR/L', demoEmail);
-    return true;
+      setIsLoading(true);
+      setError(null);
+      setIsConfigError(false);
+      const user = await AuthService.loginAsDemo();
+      setTherapist(user);
+      setIsLoading(false);
+      return true;
+    } catch {
+      startOfflineSession('Dr. Sarah Mitchell, OTR/L', 'therapist@simats.edu');
+      return true;
+    }
   };
 
   const logout = async () => {

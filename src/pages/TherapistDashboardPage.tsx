@@ -25,8 +25,11 @@ import {
   Search,
   LogOut,
   FolderOpen,
+  TrendingUp,
 } from 'lucide-react';
 import { soundEffects } from '../services/audio/SoundEffects';
+import { TherapistAnalysisGraph } from '../components/analytics/TherapistAnalysisGraph';
+import { CongratsCelebrationModal } from '../components/common/CongratsCelebrationModal';
 
 export const TherapistDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -38,11 +41,12 @@ export const TherapistDashboardPage: React.FC = () => {
     startSession,
   } = useSession();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'children' | 'sessions' | 'reports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'children' | 'sessions' | 'analytics' | 'reports'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingChild, setEditingChild] = useState<ChildProfile | null>(null);
   const [allSessions, setAllSessions] = useState<ActivitySession[]>([]);
+  const [showCelebrationPreview, setShowCelebrationPreview] = useState(false);
 
   // Form State for Child Profile CRUD
   const [formName, setFormName] = useState('');
@@ -60,7 +64,7 @@ export const TherapistDashboardPage: React.FC = () => {
     }
   }, [authLoading, isAuthenticated, navigate]);
 
-  // Real-time Firestore sessions subscription (only when authenticated)
+  // Real-time sessions subscription (only when authenticated)
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -131,7 +135,7 @@ export const TherapistDashboardPage: React.FC = () => {
   };
 
   const handleDeleteChild = async (id: string) => {
-    if (window.confirm('Are you sure you want to remove this child profile from Firestore?')) {
+    if (window.confirm('Are you sure you want to remove this child profile from the database?')) {
       await DataService.deleteChild(id);
     }
   };
@@ -194,7 +198,7 @@ export const TherapistDashboardPage: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <span className="font-black text-xl text-slate-900 tracking-tight">DIVAD</span>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
-                  Therapist Portal (Firestore Live)
+                  Therapist Portal
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
@@ -214,6 +218,15 @@ export const TherapistDashboardPage: React.FC = () => {
                 <span>Launch Child Mode ({currentChild.name.split(' ')[0]})</span>
               </button>
             )}
+
+            <button
+              onClick={() => setShowCelebrationPreview(true)}
+              className="hidden md:flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition shadow-sm"
+              title="Preview Animated Boy & Girl Baby Celebration"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <span>Preview Celebration</span>
+            </button>
 
             <button
               onClick={handleExportCSV}
@@ -242,6 +255,7 @@ export const TherapistDashboardPage: React.FC = () => {
             { id: 'overview', label: 'Dashboard Overview', icon: Activity },
             { id: 'children', label: `Child Profiles (${childrenList.length})`, icon: Users },
             { id: 'sessions', label: `Sessions Log (${allSessions.length})`, icon: Calendar },
+            { id: 'analytics', label: 'Progression & Analysis', icon: TrendingUp },
             { id: 'reports', label: 'Clinical Reports', icon: FileText },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -277,7 +291,7 @@ export const TherapistDashboardPage: React.FC = () => {
                 </div>
                 <div className="text-3xl font-black text-slate-900 mt-1">{childrenList.length}</div>
                 <div className="text-[11px] text-emerald-600 font-semibold mt-1">
-                  Synced via Firestore
+                  Live Clinical Sync
                 </div>
               </div>
 
@@ -307,9 +321,30 @@ export const TherapistDashboardPage: React.FC = () => {
                 </div>
                 <div className="text-2xl font-black text-slate-800 mt-1">6 Sections</div>
                 <div className="text-[11px] text-emerald-600 font-semibold mt-1">
-                  BLE & Simulation Ready
+                  Physical BLE Active
                 </div>
               </div>
+            </div>
+
+            {/* Interactive Clinical Analytics Callout Banner */}
+            <div className="bg-gradient-to-r from-sky-600 via-indigo-600 to-teal-600 rounded-3xl p-5 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="space-y-1 text-center sm:text-left">
+                <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-white/20 text-xs font-bold backdrop-blur-sm">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>Clinical Progression Analytics</span>
+                </div>
+                <h3 className="text-lg font-black tracking-tight">Interactive Developmental Analysis Graph</h3>
+                <p className="text-xs text-sky-100 max-w-xl">
+                  Analyze child success progression curves, monitor the fading of physical assistance prompts, and inspect fastener section mastery.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className="px-5 py-2.5 rounded-2xl bg-white hover:bg-sky-50 text-sky-900 font-black text-xs shadow-md transition-all transform hover:scale-105 active:scale-95 flex items-center space-x-2 whitespace-nowrap"
+              >
+                <span>Open Analysis Graph</span>
+                <TrendingUp className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Quick Child Selector & Fastener Performance Grid */}
@@ -449,7 +484,7 @@ export const TherapistDashboardPage: React.FC = () => {
                 className="w-full sm:w-auto flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm transition"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add New Child to Firestore</span>
+                <span>Add New Child</span>
               </button>
             </div>
 
@@ -460,7 +495,7 @@ export const TherapistDashboardPage: React.FC = () => {
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
                   {searchQuery
                     ? `No children matching "${searchQuery}".`
-                    : 'Get started by creating your first child profile. It will be stored securely in Firestore.'}
+                    : 'Get started by creating your first child profile. It will be stored securely in the clinical system.'}
                 </p>
                 <button
                   onClick={handleOpenAddModal}
@@ -563,7 +598,7 @@ export const TherapistDashboardPage: React.FC = () => {
         {activeTab === 'sessions' && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-black text-base text-slate-900">Firestore Training Session Logs</h3>
+              <h3 className="font-black text-base text-slate-900">Training Session Logs (Live Sync)</h3>
               <button
                 onClick={handleExportCSV}
                 disabled={allSessions.length === 0}
@@ -579,7 +614,7 @@ export const TherapistDashboardPage: React.FC = () => {
                 <Calendar className="w-12 h-12 text-slate-300 mx-auto" />
                 <h4 className="font-black text-base text-slate-800">No Training Sessions Recorded Yet</h4>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  When a session is conducted in Child Mode, attempts and outcomes will automatically stream here directly from Firestore.
+                  When a session is conducted in Child Mode, attempts and outcomes will automatically stream here in real time.
                 </p>
               </div>
             ) : (
@@ -645,7 +680,17 @@ export const TherapistDashboardPage: React.FC = () => {
           </div>
         )}
 
-        {/* --- TAB 4: CLINICAL REPORTS --- */}
+        {/* --- TAB 4: CLINICAL PROGRESSION & ANALYSIS GRAPH --- */}
+        {activeTab === 'analytics' && (
+          <TherapistAnalysisGraph
+            sessions={allSessions}
+            children={childrenList}
+            selectedChildId={currentChild?.id}
+            onSelectChild={(childId) => selectChild(childId)}
+          />
+        )}
+
+        {/* --- TAB 5: CLINICAL REPORTS --- */}
         {activeTab === 'reports' && (
           <div className="space-y-6">
             <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -674,7 +719,7 @@ export const TherapistDashboardPage: React.FC = () => {
             {childrenList.length === 0 ? (
               <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 space-y-2">
                 <FileText className="w-10 h-10 text-slate-400 mx-auto" />
-                <h4 className="font-bold text-sm text-slate-800">No Child Records in Firestore</h4>
+                <h4 className="font-bold text-sm text-slate-800">No Child Records Found</h4>
                 <p className="text-xs text-slate-500">Add child profiles to generate and download clinical PDF reports.</p>
               </div>
             ) : (
@@ -723,7 +768,7 @@ export const TherapistDashboardPage: React.FC = () => {
           <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-black text-base text-slate-900">
-                {editingChild ? 'Edit Child Profile (Firestore)' : 'Add New Child to Firestore'}
+                {editingChild ? 'Edit Child Profile' : 'Add New Child Profile'}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -840,13 +885,23 @@ export const TherapistDashboardPage: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold transition shadow"
                 >
-                  Save to Firestore
+                  Save Profile
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+      {/* Animated Boy & Girl Baby Celebration Preview Modal */}
+      <CongratsCelebrationModal
+        isOpen={showCelebrationPreview}
+        onClose={() => setShowCelebrationPreview(false)}
+        activityTitle="Zipper Dressing Mastery"
+        activityTitleTamil="ஜிப் ஆடை பயிற்சி"
+        starsEarned={3}
+        language="en"
+        childName={currentChild?.name || 'Aarav'}
+      />
     </div>
   );
 };

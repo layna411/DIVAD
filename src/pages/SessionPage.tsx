@@ -22,11 +22,13 @@ import {
 } from 'lucide-react';
 import { soundEffects } from '../services/audio/SoundEffects';
 import { audioService } from '../services/audio/AudioService';
+import { CongratsCelebrationModal } from '../components/common/CongratsCelebrationModal';
 
 export const SessionPage: React.FC = () => {
   const navigate = useNavigate();
   const {
     currentSession,
+    currentChild,
     currentActivityIndex,
     currentStepIndex,
     currentAssistanceLevel,
@@ -302,31 +304,52 @@ export const SessionPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Real-time Sensor Feedback Callout */}
+            {/* Real-time Sensor Feedback Callout with Baby Cheering */}
             {feedback.type !== 'idle' && (
               <div
-                className={`p-3.5 rounded-2xl border flex items-start space-x-2.5 animate-bounce-gentle ${
+                className={`p-3.5 rounded-2xl border flex items-center space-x-3 transition-all animate-bounce-gentle ${
                   feedback.type === 'success'
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                    ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 border-emerald-300 text-emerald-950 shadow-md ring-2 ring-emerald-200'
                     : 'bg-amber-50 border-amber-300 text-amber-900'
                 }`}
               >
                 {feedback.type === 'success' ? (
-                  <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    <img
+                      src="/boy-avatar.png"
+                      alt="Baby Boy Cheering"
+                      className="w-11 h-11 object-contain rounded-full border-2 border-emerald-400 bg-white shadow-sm animate-bounce-cheer"
+                    />
+                    <img
+                      src="/girl-avatar-flipped.png"
+                      alt="Baby Girl Cheering"
+                      className="w-11 h-11 object-contain rounded-full border-2 border-pink-400 bg-white shadow-sm animate-bounce-cheer"
+                      style={{ animationDelay: '0.25s' }}
+                    />
+                  </div>
                 ) : (
                   <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
                 )}
-                <div>
-                  <div className="text-xs font-bold">
-                    {feedback.type === 'success'
-                      ? language === 'ta'
-                        ? 'அருமை! சரியாக செய்தீர்கள்!'
-                        : 'Excellent! Action detected!'
-                      : language === 'ta'
-                      ? 'மீண்டும் முயற்சி செய்யுங்கள்'
-                      : 'Gentle Prompt:'}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-black flex items-center space-x-1.5">
+                    {feedback.type === 'success' ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-emerald-600 inline flex-shrink-0" />
+                        <span className="text-emerald-900 truncate">
+                          {language === 'ta'
+                            ? 'அருமை! பணி வெற்றிகரமாக முடிந்தது! 🎉'
+                            : 'Awesome! Request Completed! 🎉'}
+                        </span>
+                      </>
+                    ) : (
+                      <span>
+                        {language === 'ta'
+                          ? 'மீண்டும் முயற்சி செய்யுங்கள்'
+                          : 'Gentle Prompt:'}
+                      </span>
+                    )}
                   </div>
-                  <div className="text-xs font-medium">
+                  <div className="text-xs font-semibold text-slate-700 mt-0.5 leading-snug">
                     {language === 'ta' ? feedback.messageTa : feedback.messageEn}
                   </div>
                 </div>
@@ -369,47 +392,18 @@ export const SessionPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Celebration Modal (Section 14 & 15) */}
-      {showCelebration && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border-4 border-amber-400 text-center space-y-5 animate-scale-up">
-            <div className="w-20 h-20 rounded-full bg-amber-100 mx-auto flex items-center justify-center animate-bounce">
-              <Award className="w-12 h-12 text-amber-500" />
-            </div>
-
-            <div className="space-y-1">
-              <h3 className="text-2xl sm:text-3xl font-black text-slate-900">
-                {language === 'ta' ? 'அற்புதம்! முடித்துவிட்டீர்கள்!' : 'CONGRATULATIONS!'}
-              </h3>
-              <p className="text-sm font-semibold text-amber-700">
-                {language === 'ta'
-                  ? `${activity.titleTamil} வெற்றிகரமாக முடிந்தது!`
-                  : `You mastered the ${activity.title}!`}
-              </p>
-            </div>
-
-            {/* Stars Award */}
-            <div className="flex items-center justify-center space-x-2 py-2">
-              {[1, 2, 3].map((s) => (
-                <Star key={s} className="w-8 h-8 fill-amber-400 text-amber-500 animate-pulse" />
-              ))}
-            </div>
-
-            <p className="text-xs text-slate-600 max-w-xs mx-auto">
-              {language === 'ta'
-                ? 'சிறப்பான முயற்சி! தொடர்ந்து அடுத்த செயல்பாட்டிற்கு செல்வோம்.'
-                : 'Awesome independence skills! Ready for the next activity?'}
-            </p>
-
-            <button
-              onClick={closeCelebration}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-600 hover:to-yellow-500 text-slate-950 font-black text-base shadow-lg transition transform hover:scale-[1.02] active:scale-95"
-            >
-              {language === 'ta' ? 'அடுத்து தொடரவும்' : 'CONTINUE'}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Animated Boy & Girl Baby Congrats Celebration Modal */}
+      <CongratsCelebrationModal
+        isOpen={showCelebration}
+        onClose={closeCelebration}
+        onContinue={closeCelebration}
+        onRetry={resetCurrentActivity}
+        activityTitle={activity.title}
+        activityTitleTamil={activity.titleTamil}
+        starsEarned={3}
+        language={language}
+        childName={currentChild?.name}
+      />
     </div>
   );
 };
