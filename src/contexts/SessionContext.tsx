@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { ACTIVITIES_DATA } from '../data/activitiesData';
 import { DataService } from '../services/firebase/dataService';
+import { AuthService } from '../services/firebase/authService';
 import { useHardware } from './HardwareContext';
 import { SensorValidationEngine } from '../services/validation/SensorValidationEngine';
 import { soundEffects } from '../services/audio/SoundEffects';
@@ -111,35 +112,48 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   useEffect(() => {
-    // Realtime Firestore subscription for children
     let unsubscribeChildren: (() => void) | undefined;
-    try {
-      unsubscribeChildren = DataService.subscribeChildren((list) => {
-        setChildrenList(list);
-        setCurrentChild((prev) => {
-          if (!prev && list.length > 0) {
-            setCurrentAssistanceLevelState(list[0].baselineAssistanceLevel);
-            setLanguageState(list[0].preferredLanguage);
-            return list[0];
-          }
-          if (prev) {
-            const match = list.find((c) => c.id === prev.id);
-            return match || (list.length > 0 ? list[0] : null);
-          }
-          return null;
-        });
-      });
-    } catch (e) {
-      console.warn('[SessionContext] Failed to subscribe to children:', e);
-    }
 
-    return () => {
+    const setupChildrenSubscription = () => {
       if (unsubscribeChildren) {
         try {
           unsubscribeChildren();
-        } catch (e) {
-          // Safe unmount
-        }
+        } catch {}
+      }
+      try {
+        unsubscribeChildren = DataService.subscribeChildren((list) => {
+          setChildrenList(list);
+          setCurrentChild((prev) => {
+            if (!prev && list.length > 0) {
+              setCurrentAssistanceLevelState(list[0].baselineAssistanceLevel);
+              setLanguageState(list[0].preferredLanguage);
+              return list[0];
+            }
+            if (prev) {
+              const match = list.find((c) => c.id === prev.id);
+              return match || (list.length > 0 ? list[0] : null);
+            }
+            return null;
+          });
+        });
+      } catch (e) {
+        console.warn('[SessionContext] Failed to subscribe to children:', e);
+      }
+    };
+
+    setupChildrenSubscription();
+
+    // Re-subscribe whenever authenticated therapist changes
+    const unsubAuth = AuthService.subscribeAuthState(() => {
+      setupChildrenSubscription();
+    });
+
+    return () => {
+      unsubAuth();
+      if (unsubscribeChildren) {
+        try {
+          unsubscribeChildren();
+        } catch (e) {}
       }
     };
   }, []);

@@ -35,7 +35,7 @@ export const CongratsCelebrationModal: React.FC<CongratsCelebrationModalProps> =
       soundEffects.playCelebrationFanfare();
       setTimeout(() => {
         soundEffects.playSuccessChime();
-      }, 700);
+      }, 650);
     } catch (e) {
       console.warn('Audio playback notice:', e);
     }
@@ -44,47 +44,44 @@ export const CongratsCelebrationModal: React.FC<CongratsCelebrationModalProps> =
     try {
       const speechText =
         language === 'ta'
-          ? `அற்புதம்! வாழ்த்துகள்! ${childName ? `${childName}, ` : ''}நீங்கள் இந்த பணியை வெற்றிகரமாக முடித்துவிட்டீர்கள்!`
-          : `Congratulations! ${childName ? `${childName}, ` : ''}You successfully completed the task!`;
+          ? `அற்புதம்! வாழ்த்துகள்! ${childName ? `${childName}, ` : ''}நீங்கள் ${activityTitleTamil} வெற்றிகரமாக முடித்துவிட்டீர்கள்!`
+          : `Congratulations! ${childName ? `${childName}, ` : ''}You successfully completed ${activityTitle}!`;
       audioService.speak(speechText, language);
     } catch (e) {
       console.warn('Speech notice:', e);
     }
 
-    // 3. Multi-wave colorful confetti burst
-    const end = Date.now() + 2500;
-    const colors = ['#f59e0b', '#38bdf8', '#ec4899', '#10b981', '#8b5cf6'];
+    // 3. Multi-wave colorful confetti burst from both sides
+    const colors = ['#f59e0b', '#38bdf8', '#ec4899', '#10b981', '#8b5cf6', '#fbbf24'];
 
-    const frame = () => {
-      confetti({
-        particleCount: 5,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0, y: 0.7 },
-        colors,
-      });
-      confetti({
-        particleCount: 5,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1, y: 0.7 },
-        colors,
-      });
-
-      if (Date.now() < end) {
-        requestAnimationFrame(frame);
-      }
-    };
-    frame();
-
-    // Center big burst
+    // Left cannon
     confetti({
-      particleCount: 80,
-      spread: 90,
-      origin: { y: 0.5 },
+      particleCount: 50,
+      angle: 60,
+      spread: 70,
+      origin: { x: 0.1, y: 0.7 },
       colors,
     });
-  }, [isOpen, language, childName]);
+
+    // Right cannon
+    confetti({
+      particleCount: 50,
+      angle: 120,
+      spread: 70,
+      origin: { x: 0.9, y: 0.7 },
+      colors,
+    });
+
+    // Center burst after slight delay
+    setTimeout(() => {
+      confetti({
+        particleCount: 80,
+        spread: 100,
+        origin: { y: 0.5 },
+        colors,
+      });
+    }, 300);
+  }, [isOpen, language, childName, activityTitle, activityTitleTamil]);
 
   if (!isOpen) return null;
 
@@ -97,86 +94,77 @@ export const CongratsCelebrationModal: React.FC<CongratsCelebrationModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none">
-      <div className="relative max-w-xl w-full bg-gradient-to-b from-white via-sky-50/40 to-amber-50/60 rounded-[2.5rem] p-5 sm:p-7 shadow-2xl border-4 border-amber-400 overflow-hidden text-center space-y-4 animate-scale-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in select-none">
+      <div className="relative max-w-lg w-full bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border-4 border-amber-300 overflow-hidden text-center space-y-4 animate-scale-up">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition z-10"
+          className="absolute top-3.5 right-3.5 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition z-20"
           title="Close"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Ambient Top Glow */}
-        <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-80 h-32 bg-amber-300/40 blur-3xl rounded-full pointer-events-none" />
+        {/* Ambient Warm Golden Glow */}
+        <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-72 h-24 bg-amber-200/50 blur-3xl rounded-full pointer-events-none" />
 
-        {/* The Animated Boy and Girl Celebration Artwork */}
-        <div className="relative mx-auto rounded-3xl overflow-hidden shadow-xl border-2 border-amber-300/80 bg-white max-w-lg">
+        {/* Hero Celebration Animated Artwork */}
+        <div className="relative mx-auto rounded-2xl overflow-hidden shadow-lg border border-amber-200 bg-amber-50/30">
           <img
             src="/congrats-babies.png"
-            alt="Animated Baby Boy & Girl - Congrats! Successfully Completed!"
-            className="w-full h-auto max-h-64 sm:max-h-72 object-contain mx-auto animate-bounce-cheer animate-rainbow-glow"
+            alt="Congrats! Successfully Completed!"
+            className="w-full h-auto object-contain mx-auto animate-bounce-cheer"
           />
-
-          {/* Golden Badge Overlay in bottom corner */}
-          <div className="absolute bottom-2.5 right-2.5 px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-[11px] shadow-md flex items-center space-x-1">
-            <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
-            <span>DIVAD CHAMPION</span>
-          </div>
         </div>
 
-        {/* Main Congratulations Header */}
-        <div className="space-y-1">
-          <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-black uppercase tracking-wider">
-            <span>🎉 Task Complete</span>
+        {/* Personalized Congratulation Details */}
+        <div className="space-y-1.5 pt-1">
+          <div className="inline-flex items-center space-x-1 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-xs font-black uppercase tracking-wider">
+            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <span>{language === 'ta' ? 'வெற்றிகரமாக முடிந்தது' : 'Activity Completed'}</span>
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">
-            {language === 'ta' ? 'வாழ்த்துகள்! வெற்றிகரமாக முடிந்தது!' : 'CONGRATS! SUCCESSFULLY COMPLETED!'}
-          </h2>
-
-          <p className="text-sm sm:text-base font-bold text-amber-600">
+          <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
             {language === 'ta'
-              ? `${activityTitleTamil} வெற்றிகரமாக முடிந்தது!`
-              : `You successfully completed ${activityTitle}!`}
-          </p>
+              ? `${activityTitleTamil} முடிந்தது!`
+              : `You Mastered ${activityTitle}!`}
+          </h3>
 
-          <p className="text-xs text-slate-500 font-medium max-w-md mx-auto">
+          <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-sm mx-auto">
             {language === 'ta'
-              ? 'சிறப்பான முயற்சி! நீங்கள் самостояமாக ஆடை அணியும் பயிற்சியை முடித்துவிட்டீர்கள்.'
-              : 'Superb independence skills! Both baby friends are celebrating your achievement.'}
+              ? `${childName ? `${childName}, ` : ''}சிறப்பான முயற்சி! நீங்கள் самостояமாக ஆடை அணியும் பயிற்சியை முடித்துவிட்டீர்கள்.`
+              : `Great independence skills${childName ? `, ${childName}` : ''}! You completed all steps successfully.`}
           </p>
         </div>
 
-        {/* Star Rating Animation */}
-        <div className="flex items-center justify-center space-x-3 py-1">
+        {/* Star Rating Popping In */}
+        <div className="flex items-center justify-center space-x-2 py-1">
           {[1, 2, 3].map((starIdx) => (
             <div
               key={starIdx}
-              className="relative p-2 rounded-2xl bg-amber-100/80 border border-amber-300 shadow-sm animate-pop-star"
-              style={{ animationDelay: `${starIdx * 180}ms` }}
+              className="p-2 rounded-2xl bg-amber-50 border border-amber-200 shadow-sm animate-pop-star"
+              style={{ animationDelay: `${starIdx * 150}ms` }}
             >
-              <Star className="w-8 h-8 sm:w-9 sm:h-9 fill-amber-400 text-amber-500 animate-pulse" />
+              <Star className="w-8 h-8 fill-amber-400 text-amber-500 animate-pulse" />
             </div>
           ))}
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+        <div className="flex items-center justify-center gap-3 pt-1">
           {onRetry && (
             <button
               onClick={onRetry}
-              className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center space-x-1.5 border border-slate-200"
+              className="px-4 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center space-x-1.5 border border-slate-200"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>{language === 'ta' ? 'மீண்டும் செய்ய' : 'Play Again'}</span>
+              <span>{language === 'ta' ? 'மீண்டும்' : 'Play Again'}</span>
             </button>
           )}
 
           <button
             onClick={handleContinue}
-            className="w-full sm:flex-1 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-600 hover:to-yellow-500 text-slate-950 font-black text-sm sm:text-base shadow-lg transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2 border-2 border-yellow-200"
+            className="flex-1 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-600 hover:to-yellow-500 text-slate-950 font-black text-sm sm:text-base shadow-lg transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2"
           >
             <span>{language === 'ta' ? 'அடுத்த செயல்பாடு தொடரவும்' : 'CONTINUE NEXT TASK'}</span>
             <ArrowRight className="w-5 h-5" />
@@ -188,3 +176,4 @@ export const CongratsCelebrationModal: React.FC<CongratsCelebrationModalProps> =
 };
 
 export default CongratsCelebrationModal;
+

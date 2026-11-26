@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import Session as SessionModel, SessionAttempt
@@ -7,6 +7,7 @@ from backend.schemas import (
     ActivitySession, SessionCreateUpdateRequest,
     StepAttempt, AttemptLogRequest
 )
+from backend.auth_utils import decode_access_token
 
 router = APIRouter(prefix="/api/sessions", tags=["Activity Sessions"])
 
@@ -42,10 +43,27 @@ def model_to_dto(session: SessionModel) -> ActivitySession:
     )
 
 @router.get("", response_model=List[ActivitySession])
-def get_sessions(childId: Optional[str] = None, db: Session = Depends(get_db)):
+def get_sessions(
+    childId: Optional[str] = None,
+    therapist_id: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db)
+):
+    target_uid = therapist_id
+    if not target_uid and authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        payload = decode_access_token(token)
+        if payload and "sub" in payload:
+            target_uid = payload["sub"]
+
     query = db.query(SessionModel)
     if childId:
         query = query.filter(SessionModel.child_id == childId)
+    if target_uid:
+        query = query.filter(SessionModel.therapist_id == target_uid)
+    else:
+        query = query.filter(SessionModel.therapist_id == "th_demo_mitchell")
+
     sessions = query.order_by(SessionModel.start_time.desc()).all()
     return [model_to_dto(s) for s in sessions]
 

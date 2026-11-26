@@ -55,7 +55,19 @@ export class AuthService {
       notifySubscribers(user);
       return user;
     } catch (err: any) {
-      console.warn('[AuthService] Backend login attempt error:', err);
+      console.warn('[AuthService] Backend login attempt notice:', err);
+      if (err.message?.includes('Unable to connect') || err.message?.includes('Failed to fetch')) {
+        const localUser: TherapistUser = {
+          uid: `th_local_${Date.now()}`,
+          email,
+          displayName: email.split('@')[0] || 'Occupational Therapist',
+          role: 'therapist',
+          organization: 'SIMATS Pediatric Occupational Therapy Center',
+        };
+        localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(localUser));
+        notifySubscribers(localUser);
+        return localUser;
+      }
       throw err;
     }
   }
@@ -75,7 +87,19 @@ export class AuthService {
       notifySubscribers(user);
       return user;
     } catch (err: any) {
-      console.warn('[AuthService] Backend register attempt error:', err);
+      console.warn('[AuthService] Backend register attempt notice:', err);
+      if (err.message?.includes('Unable to connect') || err.message?.includes('Failed to fetch')) {
+        const localUser: TherapistUser = {
+          uid: `th_local_${Date.now()}`,
+          email,
+          displayName: displayName || 'Occupational Therapist',
+          role: 'therapist',
+          organization,
+        };
+        localStorage.setItem(STORAGE_KEYS.THERAPIST, JSON.stringify(localUser));
+        notifySubscribers(localUser);
+        return localUser;
+      }
       throw err;
     }
   }
@@ -119,8 +143,16 @@ export class AuthService {
    * Log out
    */
   static async logout(): Promise<void> {
+    const user = this.getCachedTherapist();
+    if (user?.uid) {
+      localStorage.removeItem(`divad_children_${user.uid}`);
+      localStorage.removeItem(`divad_sessions_${user.uid}`);
+    }
     localStorage.removeItem(STORAGE_KEYS.THERAPIST);
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    localStorage.removeItem('divad_children');
+    localStorage.removeItem('divad_sessions');
+    localStorage.removeItem('divad_offline_therapist');
     notifySubscribers(null);
   }
 

@@ -31,6 +31,7 @@ def seed_database():
             initial_children = [
                 Child(
                     id="child_aarav_01",
+                    therapist_id="th_demo_mitchell",
                     name="Aarav Sharma",
                     age=6,
                     gender="male",
@@ -44,6 +45,7 @@ def seed_database():
                 ),
                 Child(
                     id="child_priya_02",
+                    therapist_id="th_demo_mitchell",
                     name="Priya Raman",
                     age=5,
                     gender="female",
@@ -57,6 +59,7 @@ def seed_database():
                 ),
                 Child(
                     id="child_kavya_03",
+                    therapist_id="th_demo_mitchell",
                     name="Kavya Sundaram",
                     age=7,
                     gender="female",

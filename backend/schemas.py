@@ -31,6 +31,7 @@ class AuthResponse(BaseModel):
 # ----------------- CHILD PROFILE SCHEMAS -----------------
 class ChildProfile(BaseModel):
     id: str
+    therapistId: Optional[str] = Field(default=None, validation_alias="therapist_id")
     name: str
     age: int
     gender: str = "male"
@@ -48,6 +49,7 @@ class ChildProfile(BaseModel):
 
 class ChildCreateUpdateRequest(BaseModel):
     id: Optional[str] = None
+    therapistId: Optional[str] = None
     name: str
     age: int = 6
     gender: str = "male"

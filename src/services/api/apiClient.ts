@@ -26,20 +26,27 @@ class ApiClient {
 
   // ---------------- AUTH API ----------------
   async login(email: string, pass: string): Promise<{ user: TherapistUser; token: string }> {
-    const res = await fetch(`${this.baseUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass }),
-    });
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass }),
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'Login failed. Check your email or password.');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Login failed. Check your email or password.');
+      }
+
+      const data = await res.json();
+      localStorage.setItem('divad_token', data.token);
+      return data;
+    } catch (err: any) {
+      if (err.name === 'TypeError' && (err.message === 'Failed to fetch' || err.message?.includes('fetch'))) {
+        throw new Error('Unable to connect to backend server. Running in local clinical mode.');
+      }
+      throw err;
     }
-
-    const data = await res.json();
-    localStorage.setItem('divad_token', data.token);
-    return data;
   }
 
   async register(
@@ -48,25 +55,32 @@ class ApiClient {
     displayName: string,
     organization: string = 'SIMATS OT Center'
   ): Promise<{ user: TherapistUser; token: string }> {
-    const res = await fetch(`${this.baseUrl}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        password: pass,
-        displayName,
-        organization,
-      }),
-    });
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password: pass,
+          displayName,
+          organization,
+        }),
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'Registration failed.');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Registration failed.');
+      }
+
+      const data = await res.json();
+      localStorage.setItem('divad_token', data.token);
+      return data;
+    } catch (err: any) {
+      if (err.name === 'TypeError' && (err.message === 'Failed to fetch' || err.message?.includes('fetch'))) {
+        throw new Error('Unable to connect to backend server. Running in local clinical mode.');
+      }
+      throw err;
     }
-
-    const data = await res.json();
-    localStorage.setItem('divad_token', data.token);
-    return data;
   }
 
   async demoLogin(): Promise<{ user: TherapistUser; token: string }> {

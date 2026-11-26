@@ -9,28 +9,39 @@ const STORAGE_KEYS = {
 };
 
 export class DataService {
+  private static getScopedKey(baseKey: string): string {
+    const raw = localStorage.getItem('divad_therapist') || localStorage.getItem('divad_offline_therapist');
+    if (raw) {
+      try {
+        const user = JSON.parse(raw);
+        if (user && user.uid) {
+          return `${baseKey}_${user.uid}`;
+        }
+      } catch {}
+    }
+    return baseKey;
+  }
+
   /**
    * Real-time subscription to children collection in Python/MySQL backend.
-   * Loads local cache instantly, fetches from MySQL, and periodically syncs updates.
+   * Scoped strictly to the active authenticated therapist.
    */
   static subscribeChildren(callback: (children: ChildProfile[]) => void): Unsubscribe {
-    // 1. Emit cached children immediately for instant render
+    // 1. Emit therapist-scoped cached children immediately
     const cached = this.getCachedChildren();
-    if (cached.length > 0) {
-      callback(cached);
-    }
+    callback(cached);
 
     let isSubscribed = true;
 
     const fetchLatest = async () => {
       try {
         const children = await apiClient.getChildren();
-        if (isSubscribed && children) {
-          localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(children));
+        if (isSubscribed && Array.isArray(children)) {
+          localStorage.setItem(this.getScopedKey(STORAGE_KEYS.CHILDREN), JSON.stringify(children));
           callback(children);
         }
       } catch (err) {
-        // Backend unavailable; local persistence stays active
+        // Backend unavailable; local therapist cache remains active
       }
     };
 
@@ -51,17 +62,15 @@ export class DataService {
    */
   static subscribeSessions(callback: (sessions: ActivitySession[]) => void): Unsubscribe {
     const cached = this.getCachedSessions();
-    if (cached.length > 0) {
-      callback(cached);
-    }
+    callback(cached);
 
     let isSubscribed = true;
 
     const fetchLatest = async () => {
       try {
         const sessions = await apiClient.getSessions();
-        if (isSubscribed && sessions) {
-          localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+        if (isSubscribed && Array.isArray(sessions)) {
+          localStorage.setItem(this.getScopedKey(STORAGE_KEYS.SESSIONS), JSON.stringify(sessions));
           callback(sessions);
         }
       } catch (err) {
@@ -103,7 +112,7 @@ export class DataService {
     } else {
       cached.unshift(childDoc);
     }
-    localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(cached));
+    localStorage.setItem(this.getScopedKey(STORAGE_KEYS.CHILDREN), JSON.stringify(cached));
 
     // Save to Python + MySQL Backend
     try {
@@ -122,7 +131,7 @@ export class DataService {
   static async deleteChild(id: string): Promise<boolean> {
     // Update local cache immediately
     const cached = this.getCachedChildren().filter((c) => c.id !== id);
-    localStorage.setItem(STORAGE_KEYS.CHILDREN, JSON.stringify(cached));
+    localStorage.setItem(this.getScopedKey(STORAGE_KEYS.CHILDREN), JSON.stringify(cached));
 
     try {
       await apiClient.deleteChild(id);
@@ -146,7 +155,7 @@ export class DataService {
     } else {
       cached.unshift(session);
     }
-    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(cached));
+    localStorage.setItem(this.getScopedKey(STORAGE_KEYS.SESSIONS), JSON.stringify(cached));
 
     // Save to Python + MySQL Backend
     try {
@@ -159,7 +168,7 @@ export class DataService {
 
   // Local Storage Cache Helpers
   static getCachedChildren(): ChildProfile[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.CHILDREN);
+    const raw = localStorage.getItem(this.getScopedKey(STORAGE_KEYS.CHILDREN));
     if (!raw) return [];
     try {
       return JSON.parse(raw);
@@ -169,7 +178,7 @@ export class DataService {
   }
 
   static getCachedSessions(): ActivitySession[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
+    const raw = localStorage.getItem(this.getScopedKey(STORAGE_KEYS.SESSIONS));
     if (!raw) return [];
     try {
       return JSON.parse(raw);

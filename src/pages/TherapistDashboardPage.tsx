@@ -86,7 +86,7 @@ export const TherapistDashboardPage: React.FC = () => {
         }
       }
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, therapist?.uid]);
 
   const handleOpenAddModal = () => {
     setEditingChild(null);

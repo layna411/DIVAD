@@ -26,6 +26,7 @@ class Child(Base):
     __tablename__ = "children"
 
     id = Column(String(64), primary_key=True, index=True)
+    therapist_id = Column(String(64), ForeignKey("therapists.uid", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String(128), nullable=False, index=True)
     age = Column(Integer, nullable=False, default=6)
     gender = Column(String(16), nullable=False, default="male")
@@ -38,6 +39,7 @@ class Child(Base):
     updated_at = Column(BigInteger, nullable=False, default=lambda: int(time.time() * 1000))
 
     sessions = relationship("Session", back_populates="child", cascade="all, delete-orphan")
+    therapist = relationship("Therapist", backref="children")
 
 
 class Session(Base):
