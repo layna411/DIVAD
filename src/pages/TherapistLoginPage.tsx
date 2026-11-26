@@ -78,12 +78,19 @@ export const TherapistLoginPage: React.FC = () => {
 
       {/* Main Login Card */}
       <div className="max-w-md w-full mx-auto my-auto bg-white rounded-3xl shadow-xl border border-slate-200/80 p-6 sm:p-8 space-y-5">
-        {/* Header Icon & Title */}
+        {/* Official DIVAD Logo Header */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-sky-600 text-white mx-auto flex items-center justify-center shadow-md">
-            <Shield className="w-8 h-8 text-amber-300" />
+          <div className="flex justify-center">
+            <img
+              src="/logo.png"
+              alt="DIVAD Logo"
+              className="h-20 sm:h-24 object-contain drop-shadow-sm hover:scale-105 transition duration-300"
+            />
           </div>
-          <h2 className="text-2xl font-black text-slate-900">Therapist Portal</h2>
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-xs font-bold">
+            <Shield className="w-3.5 h-3.5 text-sky-600" />
+            <span>Therapist Portal</span>
+          </div>
           <p className="text-xs text-slate-500 font-medium">
             {mode === 'signin' && 'Sign in to monitor children, track progress & manage sessions.'}
             {mode === 'signup' && 'Create a licensed occupational therapist account.'}

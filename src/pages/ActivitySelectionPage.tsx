@@ -41,6 +41,12 @@ export const ActivitySelectionPage: React.FC = () => {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
+          <img
+            src="/logo-icon.png"
+            alt="DIVAD Logo"
+            className="w-10 h-10 object-contain rounded-xl border border-slate-200/80 shadow-sm p-0.5 bg-white cursor-pointer hover:scale-105 transition"
+            onClick={() => navigate('/')}
+          />
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-800">
               {language === 'ta' ? 'DIVAD பயிற்சிப் பலகை' : 'DIVAD Dressing Board'}

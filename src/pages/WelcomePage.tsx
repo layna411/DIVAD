@@ -24,11 +24,9 @@ export const WelcomePage: React.FC = () => {
       {/* Top Bar with Language Toggle & Therapist Link */}
       <div className="max-w-6xl w-full mx-auto flex items-center justify-between">
         {/* Logo and Tagline */}
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-400 via-pink-400 to-sky-400 p-1 shadow-lg transform -rotate-3 hover:rotate-0 transition duration-300">
-            <div className="w-full h-full bg-white rounded-xl flex items-center justify-center font-black text-2xl text-amber-500">
-              D
-            </div>
+        <div className="flex items-center space-x-3 cursor-pointer" onClick={() => navigate('/')}>
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white p-1 shadow-md border border-slate-200/80 transform -rotate-2 hover:rotate-0 transition duration-300 flex items-center justify-center">
+            <img src="/logo-icon.png" alt="DIVAD Emblem" className="w-full h-full object-contain rounded-xl" />
           </div>
           <div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-800">
@@ -132,7 +130,15 @@ export const WelcomePage: React.FC = () => {
         </div>
 
         {/* Text and Actions */}
-        <div className="flex-1 text-center md:text-left space-y-5">
+        <div className="flex-1 text-center md:text-left space-y-4">
+          <div className="flex justify-center md:justify-start">
+            <img
+              src="/logo.png"
+              alt="DIVAD Logo"
+              className="h-20 sm:h-24 md:h-28 object-contain hover:scale-[1.02] transition duration-300 drop-shadow-sm"
+            />
+          </div>
+
           <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold border border-amber-300">
             <Sparkles className="w-4 h-4 text-amber-600" />
             <span>

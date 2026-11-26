@@ -184,6 +184,12 @@ export const TherapistDashboardPage: React.FC = () => {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
+            <img
+              src="/logo-icon.png"
+              alt="DIVAD Logo"
+              className="w-10 h-10 object-contain rounded-xl border border-slate-200/80 shadow-sm p-0.5 bg-white cursor-pointer hover:scale-105 transition"
+              onClick={() => navigate('/')}
+            />
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-black text-xl text-slate-900 tracking-tight">DIVAD</span>
